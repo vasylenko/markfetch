@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><title>Baseline clean article</title></head>
+<body>
+  <header><nav>Site nav</nav></header>
+  <article>
+    <h1>Baseline clean article</h1>
+    <p>This fixture represents the head-of-distribution use case: an editorial article with a single H1, a few H2 sections, plain paragraphs, one inline link to <a href="https://example.com/">example.com</a>, and a small unordered list. Nothing here exercises any edge case under repair.</p>
+    <h2>Why this matters</h2>
+    <p>If a future fix to the escape policy or anchor-stripping rule causes any drift in this fixture's output, that drift is a regression — the change touched code paths it shouldn't have. This fixture is the canary for unintended long-tail damage.</p>
+    <h2>Key points</h2>
+    <ul>
+      <li>Plain prose with no special characters.</li>
+      <li>One inline link to a public domain.</li>
+      <li>Standard heading hierarchy.</li>
+    </ul>
+    <p>A closing paragraph rounds out the substantive content so Readability can confidently identify the article body and emit a clean conversion.</p>
+  </article>
+  <footer>copyright</footer>
+</body>
+</html>

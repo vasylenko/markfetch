@@ -1,0 +1,120 @@
+name: "Release: npm publish"
+run-name: Release ${{ github.ref_name }}
+
+on:
+  workflow_dispatch:
+
+env:
+  CI: true
+
+jobs:
+  verify-ci:
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Verify release does not already exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${{ github.ref_name }}" --repo=${{ github.repository }} &>/dev/null; then
+            echo "::error::Release ${{ github.ref_name }} already exists"
+            exit 1
+          fi
+
+      - name: Verify CI passed for tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "Checking CI status for tag: ${{ github.ref_name }}"
+
+          COUNT=$(gh run list \
+            --repo=${{ github.repository }} \
+            --workflow=ci.yml \
+            --branch=${{ github.ref_name }} \
+            --status=success \
+            --limit=1 \
+            --json conclusion \
+            --jq 'length')
+
+          if [ "$COUNT" -eq 0 ]; then
+            echo "::error::CI workflow has not passed for tag ${{ github.ref_name }}"
+            exit 1
+          fi
+
+          echo "CI passed for tag ${{ github.ref_name }}"
+
+  github-release:
+    needs: verify-ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Extract changelog section for this version
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          VERSION=${TAG_NAME#v}
+          # Print everything between "## [VERSION]" and the next "## [" header.
+          # The trailing blank lines are trimmed by awk's NR/sub trick below.
+          CHANGELOG_BODY=$(awk -v ver="$VERSION" '
+            /^## \[/ {
+              if (found) exit
+              if (index($0, "[" ver "]")) found=1
+              next
+            }
+            found { print }
+          ' CHANGELOG.md)
+          if [ -z "$CHANGELOG_BODY" ]; then
+            echo "::error::No CHANGELOG.md section found for version $VERSION"
+            exit 1
+          fi
+          {
+            echo "CHANGELOG_BODY<<EOF"
+            echo "$CHANGELOG_BODY"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.ref_name }}
+          body: ${{ env.CHANGELOG_BODY }}
+
+  npm-publish:
+    needs: verify-ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Verify package.json version matches tag
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          TAG_VERSION=${TAG_NAME#v}
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag v$TAG_VERSION doesn't match package.json version $PKG_VERSION"
+            exit 1
+          fi
+          echo "Version verified: $PKG_VERSION"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Publish to npm with provenance
+        run: npm publish --provenance

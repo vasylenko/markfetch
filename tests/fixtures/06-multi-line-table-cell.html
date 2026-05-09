@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><title>Multi-line table cell fixture</title></head>
+<body>
+  <article>
+    <h1>Multi-line table cell fixture</h1>
+    <p>The conversion table below contains cells with bullet lists and multi-line content. CommonMark pipe-tables cannot express these structurally; the converter must either fall back to raw HTML or degrade gracefully without producing a broken pipe-table.</p>
+    <table>
+      <thead>
+        <tr><th>JSON</th><th>Python</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>object</td>
+          <td>
+            <ul>
+              <li>dict</li>
+              <li>OrderedDict (with object_pairs_hook)</li>
+            </ul>
+          </td>
+        </tr>
+        <tr>
+          <td>array</td>
+          <td>list</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>A second substantive paragraph keeps Readability's content score above its threshold so this fixture extracts cleanly and produces a stable baseline snapshot.</p>
+  </article>
+</body>
+</html>

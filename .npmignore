@@ -1,0 +1,24 @@
+# Source files (compiled to dist/, which is in `files`)
+src/
+tests/
+*.ts
+!*.d.ts
+tsconfig.json
+
+# Project tooling
+.github/
+.claude/
+.mcp.json
+docs/
+scripts/
+
+# Project files (rendered into the GitHub release body, not the npm package)
+CHANGELOG.md
+
+# Build/publish artifacts that shouldn't ship
+*.tgz
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store

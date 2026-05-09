@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><title>Intraword underscore fixture</title></head>
+<body>
+  <article>
+    <h1>Intraword underscore fixture</h1>
+    <p>Function signatures often italicise parameter names, producing fragments like <em>json.dump(obj, fp, *, skipkeys=False, ensure_ascii=True, **kw)</em> in rendered docs. CommonMark's left-flanking-delimiter rule means an underscore flanked by alphanumerics on both sides cannot open emphasis, so escaping it is unnecessary noise.</p>
+    <p>This fixture verifies that <code>list_tools</code>, <code>create_contact</code>, and similar identifiers round-trip without backslash-escaped underscores. Markfetch's existing escape override drops the underscore escape; this snapshot pins that behaviour.</p>
+    <p>A third paragraph adds the substantive mass Readability's heuristics need to confidently identify this as the article body and not boilerplate.</p>
+  </article>
+</body>
+</html>

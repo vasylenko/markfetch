@@ -1,0 +1,70 @@
+{
+  "name": "markfetch",
+  "version": "0.4.0",
+  "description": "MCP server: fetch a URL, return clean markdown. Built for AI agents.",
+  "license": "MIT",
+  "author": {
+    "name": "Serhii Vasylenko",
+    "email": "serhii@vasylenko.info",
+    "url": "https://devdosvid.blog"
+  },
+  "type": "module",
+  "private": false,
+  "engines": {
+    "node": ">=24"
+  },
+  "bin": {
+    "markfetch": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "markdown",
+    "fetch",
+    "html-to-markdown",
+    "scraping",
+    "readability",
+    "ai-agent",
+    "claude"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vasylenko/markfetch.git"
+  },
+  "bugs": {
+    "url": "https://github.com/vasylenko/markfetch/issues"
+  },
+  "homepage": "https://github.com/vasylenko/markfetch#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc",
+    "postbuild": "node scripts/postbuild.mjs",
+    "test": "tsx --test tests/*.test.ts",
+    "inspect": "npm run build && npx @modelcontextprotocol/inspector node dist/index.js",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@mozilla/readability": "^0.5.0",
+    "linkedom": "^0.18.0",
+    "turndown": "^7.0.0",
+    "turndown-plugin-gfm": "^1.0.2",
+    "undici": "^8.2.0",
+    "zod": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/turndown": "^5.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

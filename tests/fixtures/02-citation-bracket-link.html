@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><title>Citation bracket fixture</title></head>
+<body>
+  <article>
+    <h1>Citation bracket fixture</h1>
+    <p>HTTP/2 was developed by the IETF working group<sup><a href="#cite_1">[1]</a></sup> based on Google's earlier SPDY protocol<sup><a href="#cite_2">[2]</a></sup>. The standardisation document is RFC 7540, later obsoleted by RFC 9113.</p>
+    <p>This fixture verifies that bracket-escaping inside link text — which CommonMark requires to prevent nested-link parser errors — is preserved. The escaped form <code>[\[1\]](#cite_1)</code> is spec-correct and must not be "fixed". A second paragraph keeps Readability happy with enough substantive prose to score the article positively.</p>
+    <h2 id="cite_1">References</h2>
+    <p>This section is intentionally short.</p>
+  </article>
+</body>
+</html>

@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><title>Code fence language fixture</title></head>
+<body>
+  <article>
+    <h1>Code fence language fixture</h1>
+    <p>Many documentation generators emit syntax-highlighted code blocks with a language hint encoded in the inner code element's class attribute. Common patterns include <code>language-python</code>, <code>lang-js</code>, and Highlight.js's <code>hljs language-typescript</code>. This fixture exercises whether markfetch preserves the language hint when emitting the fenced markdown code block.</p>
+    <pre><code class="language-python">def hello(name: str) -&gt; None:
+    print(f"Hello, {name}!")
+</code></pre>
+    <p>The expected output today is a bare triple-backtick fence with no language tag. After the optional language-hint patch lands, the fence should read <code>```python</code>.</p>
+    <pre><code class="language-javascript">const greet = (name) =&gt; {
+  console.log(`Hello, ${name}!`);
+};
+</code></pre>
+    <p>A closing paragraph keeps Readability's content score comfortably above threshold for stable extraction across runs.</p>
+  </article>
+</body>
+</html>
