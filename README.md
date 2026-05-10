@@ -36,17 +36,20 @@ Generic stdio snippet — works for Claude Desktop / Claude Code / Cursor / Goos
 
 Requires Node.js ≥ 24.
 
-```bash
-git clone <repo-url>
-cd markfetch
-npm install
-npm run dev          # runs from source via tsx (fast iteration)
-npm test             # SDK-Client tests covering all 7 error codes + compiled-binary e2e
-npm run build        # tsc → dist/, then chmod +x dist/index.js
-npm run inspect      # opens MCP Inspector pointing at dist/index.js
-```
-
 To point an MCP client at your local source build, replace the install snippet's `"command": "npx"` / `"args": ["-y", "markfetch"]` with `"command": "node"` / `"args": ["/absolute/path/to/markfetch/dist/index.js"]`.
+```json
+{
+  "mcpServers": {
+    "markfetch": {
+      "command": "node",
+      "args": ["/absolute/path/to/markfetch/dist/index.js"],
+      "env": {
+        "MARKFETCH_TIMEOUT_MS": "30000"
+      }
+    }
+  }
+}
+```
 
 ## Responsible use
 
