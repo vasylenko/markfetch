@@ -1,8 +1,80 @@
 # markfetch
 
-MCP server: fetch a URL, return clean markdown. Built for AI agents.
+**Reader View for AI agents. Fetch any URL, get back clean markdown — at a real Chrome's request rate, not curl's.**
 
-Generic stdio snippet — works for Claude Desktop / Claude Code / Cursor / Goose / any stdio-MCP client:
+[![npm](https://img.shields.io/npm/v/markfetch.svg?color=10b981&label=npm)](https://www.npmjs.com/package/markfetch)
+[![ci](https://github.com/vasylenko/markfetch/actions/workflows/ci.yml/badge.svg)](https://github.com/vasylenko/markfetch/actions/workflows/ci.yml)
+[![node](https://img.shields.io/node/v/markfetch.svg?color=10b981)](https://nodejs.org/)
+[![license](https://img.shields.io/npm/l/markfetch.svg?color=10b981)](https://github.com/vasylenko/markfetch/blob/main/LICENSE)
+
+The built-in fetch tools that ship with AI coding agents return raw HTML, broken markdown, or `403` from Cloudflare more often than you'd like. `markfetch` is an MCP server that sends **HTTP/2 with a coherent Chrome header set** so bot-detection systems see a real browser, then runs the response through the **same Reader View pipeline your browser uses** (Mozilla's Readability → turndown). The output is markdown indistinguishable from a human running "Save as Markdown" — on sites that would block a naive curl.
+
+```json
+{
+  "mcpServers": {
+    "markfetch": {
+      "command": "npx",
+      "args": ["-y", "markfetch"]
+    }
+  }
+}
+```
+
+Drop the snippet into your MCP client config (Claude Desktop / Claude Code / Cursor / Goose / any stdio-MCP client). That's the whole setup.
+
+## Why markfetch?
+
+|  | Real-browser fingerprint | Reader-View extraction | Structured errors | Zero config |
+|---|:---:|:---:|:---:|:---:|
+| Built-in agent fetch tools | – | – | – | ✓ |
+| Generic Playwright / Puppeteer | ✓ | – | – | – |
+| `mcp-server-fetch` (Python) | – | basic | – | – |
+| CloudFlare `/markdown` | ✓ | ✓ | – | paid |
+| **`markfetch`** | **✓** | **✓** | **✓ (7 codes)** | **✓** |
+
+- **Real-browser HTTP/2 + Chrome fingerprint.** ALPN-negotiated h2, `User-Agent`, `Sec-CH-UA-*`, `Sec-Fetch-*`, `Accept-*`. A Chrome UA with no client hints is a *stronger* automation signal than curl — `markfetch` sends the full coherent set, derived from the UA at startup so an override stays internally consistent.
+
+- **Reader-View-quality extraction.** [linkedom](https://github.com/WebReflection/linkedom) → [@mozilla/readability](https://github.com/mozilla/readability) → [turndown](https://github.com/mixmark-io/turndown) with GFM tables, strikethrough, and task lists. Code fences preserve `language-X` hints. Sphinx-style bare `<pre>` blocks render as code, not escaped prose. Intraword underscores stay un-escaped — no more `list\_tools`.
+
+- **One tool, one shape.** `fetch_markdown(url, savePath?)` returns markdown in `content[0].text`. No `structuredContent`, no frontmatter, no metadata fields. Modern MCP clients hide `content[]` when `structuredContent` is present — `markfetch` deliberately stays on the channel your LLM can actually read.
+
+- **`savePath` escape valve.** Pass an absolute path and the markdown lands on disk instead of `content[0].text`. Use it when your client's inline tool-result cap would truncate large responses. The file is only ever the markdown of the URL — fetch errors return a `[code]` string and never touch the disk.
+
+- **Whole document or honest failure.** No pagination, no truncation. If the document doesn't fit in `MARKFETCH_MAX_BYTES`, you get `too_large` — never a half-truth.
+
+- **Stdio-clean.** Stdout is reserved for MCP frames. Stderr is fatal-only. No log spam, no ANSI escapes that could corrupt protocol framing.
+
+- **Pure Node, no subprocesses.** No Playwright, no headless Chromium, no Python hop. Single TypeScript MCP server on Node 24+.
+
+## Errors
+
+Every failure returns `[code] message` so agents can branch on prefix match without JSON parsing.
+
+| Code | When |
+|---|---|
+| `network_error` | DNS / TCP / TLS failure |
+| `http_error` | Non-2xx response (status code in message) |
+| `timeout` | Exceeded `MARKFETCH_TIMEOUT_MS` |
+| `unsupported_content_type` | Non-HTML response (PDF, JSON, etc.) — refused by design |
+| `extraction_failed` | Readability returned no article content. Common causes: JS-rendered SPAs, paywalls, body-less pages |
+| `too_large` | Response body or extracted markdown exceeds `MARKFETCH_MAX_BYTES` |
+| `save_failed` | `savePath` provided and `fs.writeFile` rejected (e.g., missing parent dir, permissions) |
+
+## What it is not
+
+- **Not a crawler.** No recursion, no `robots.txt` parsing, no rate-limit orchestration. One URL in, one document out.
+- **Not authenticated.** Anonymous fetch only — no cookie jar, no auth headers, no session reuse. Pages behind login walls return whatever the public response is, usually surfaced as `http_error`.
+- **Not a JS renderer.** Single-page apps that paint their content client-side return `extraction_failed`. Use this on server-rendered pages.
+
+## Configuration
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `MARKFETCH_TIMEOUT_MS` | `30000` | Per-request timeout in ms |
+| `MARKFETCH_MAX_BYTES` | `5000000` | Cap on response body and extracted markdown |
+| `MARKFETCH_USER_AGENT` | Pinned Chrome 130 string | Override the UA. Must be a Chrome UA — `Sec-CH-UA-*` client hints are derived from it at startup; non-Chrome strings fail fast |
+
+Pass overrides via the `env` block of your MCP client config:
 
 ```json
 {
@@ -11,41 +83,25 @@ Generic stdio snippet — works for Claude Desktop / Claude Code / Cursor / Goos
       "command": "npx",
       "args": ["-y", "markfetch"],
       "env": {
-        "MARKFETCH_TIMEOUT_MS": "30000"
+        "MARKFETCH_TIMEOUT_MS": "60000"
       }
     }
   }
 }
 ```
 
-## Capabilities:
-- Single MCP tool: `fetch_markdown(url: string)` → pure markdown in `content[0].text` (single channel, no frontmatter, no `structuredContent`)
-- 7 deterministic error codes: `network_error`, `http_error`, `timeout`, `unsupported_content_type`, `extraction_failed`, `too_large`, `save_failed`
-- Real-browser HTTP/2 + Chrome fingerprint via [undici](https://github.com/nodejs/undici)
-- Extraction pipeline: [linkedom](https://github.com/WebReflection/linkedom) → [@mozilla/readability](https://github.com/mozilla/readability) → [turndown](https://github.com/mixmark-io/turndown)
-
-## Environment variables
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `MARKFETCH_TIMEOUT_MS` | `30000` | Per-request timeout in ms |
-| `MARKFETCH_MAX_BYTES` | `5000000` | Cap on response body and extracted markdown |
-| `MARKFETCH_USER_AGENT` | Pinned Chrome 130 string | Override the User-Agent. Must be a Chrome UA — the `Sec-CH-UA-*` client hints are derived from it at startup; non-Chrome strings fail fast |
-
 ## Develop
 
 Requires Node.js ≥ 24.
 
-To point an MCP client at your local source build, replace the install snippet's `"command": "npx"` / `"args": ["-y", "markfetch"]` with `"command": "node"` / `"args": ["/absolute/path/to/markfetch/dist/index.js"]`.
+To point an MCP client at a local source build, swap `npx` for `node` + an absolute path to `dist/index.js`:
+
 ```json
 {
   "mcpServers": {
     "markfetch": {
       "command": "node",
-      "args": ["/absolute/path/to/markfetch/dist/index.js"],
-      "env": {
-        "MARKFETCH_TIMEOUT_MS": "30000"
-      }
+      "args": ["/absolute/path/to/markfetch/dist/index.js"]
     }
   }
 }
@@ -53,7 +109,7 @@ To point an MCP client at your local source build, replace the install snippet's
 
 ## Responsible use
 
-markfetch is a per-call fetch tool, not a crawler. Use it on URLs whose targets you have permission to fetch, and respect the terms of service of any site you query. The maintainer assumes no liability for misuse — see [LICENSE](LICENSE).
+`markfetch` is a per-call fetch tool, not a crawler. Use it on URLs whose targets you have permission to fetch, and respect the terms of service of any site you query. The maintainer assumes no liability for misuse — see [LICENSE](LICENSE).
 
 ## License
 
