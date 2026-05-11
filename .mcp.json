@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "markfetch": {
-      "command": "./node_modules/.bin/tsx",
-      "args": ["src/index.ts"]
+      "command": "npx",
+      "args": ["tsx", "src/index.ts"]
     }
   }
 }
