@@ -137,9 +137,7 @@ Returned as MCP tool errors (`isError: true`) with a `[code]` prefix in the mess
 
 `tsc` compiles `src/` to `dist/` (ESM). Distributed as an npm package; users invoke via `npx markfetch` (the `bin` field in `package.json` registers the binary name).
 
-Single-binary distribution is a v2 question — see §7.
-
-### Environment variables (v1)
+### Environment variables
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -148,8 +146,6 @@ Single-binary distribution is a v2 question — see §7.
 | `MARKFETCH_USER_AGENT` | Current pinned Chrome UA | Override the UA. Must be a coherent Chrome string since `Sec-CH-UA*` headers are derived from it |
 
 `MARKFETCH_TIMEOUT_MS` and `MARKFETCH_MAX_BYTES` are validated at startup — invalid values (empty, NaN, negative, non-integer) fail fast with a clear stderr error rather than silently turning into a confusing per-request error.
-
-Adding a knob in v2 means a new row here with default + rationale.
 
 ## 7. Deferred / Open Questions
 

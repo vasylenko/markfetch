@@ -14,9 +14,11 @@ scripts/
 
 # Project files (rendered into the GitHub release body, not the npm package)
 CHANGELOG.md
+CLAUDE.md
 
 # Build/publish artifacts that shouldn't ship
 *.tgz
+node_modules/
 
 # IDE / OS
 .vscode/

@@ -14,7 +14,7 @@
     "node": ">=24"
   },
   "bin": {
-    "markfetch": "./dist/index.js"
+    "markfetch": "dist/index.js"
   },
   "files": [
     "dist",
