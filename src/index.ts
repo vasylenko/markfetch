@@ -385,7 +385,7 @@ function convertToMarkdown(article: {
 
 // --- Server bootstrap ---
 
-const server = new McpServer({ name: "markfetch", version: "0.4.0" });
+const server = new McpServer({ name: "markfetch", version: "0.4.1" });
 
 server.registerTool(
   "fetch_markdown",

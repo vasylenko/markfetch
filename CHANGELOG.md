@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-05-11
+
+### Fixed
+- `bin` entry in `package.json` uses `dist/index.js` instead of `./dist/index.js` — npm 10+ stricter validation considered the leading `./` invalid and warned about silently stripping the entry on publish.
+
+### Changed
+- README rewritten for npm publication: bold subtitle, badge row (npm/CI/node/license), comparison table vs. alternative approaches (built-in agent fetch, Playwright, `mcp-server-fetch`, CloudFlare `/markdown`), reference table for the 7 error codes, and a "What it is not" scope-boundary section.
+- PRD: forward-looking statements consolidated under §7 "Deferred / Open Questions" so the body reflects current state only.
+
 ## [0.4.0] - 2026-05-10
 
 ### Added
