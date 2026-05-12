@@ -1,22 +1,8 @@
 # markfetch — SPEC
 
-Built-in fetch tools in AI coding agents return raw HTML, or broken markdown, or `403` from Cloudflare more often than they should. `markfetch` is one binary that solves both: a real-browser HTTP/2 fingerprint feeding a Reader-View extraction pipeline, exposed as an MCP server when invoked bare and as a CLI when invoked with arguments.
-
 ## Architecture
 
-Single TypeScript executable on Node ≥ 24. Source layout:
-
-```
-src/
-├── core.ts        Pure pipeline + error types. No stdout/stderr writes.
-├── mcp.ts         MCP envelope adapter (zod schema, McpServer, StdioTransport).
-├── cli.ts         CLI adapter (commander, stderr, exit codes).
-└── index.ts       Dispatcher: argv.length === 2 → mcp.ts, else → cli.ts.
-                   Adapters are imported dynamically (await import) so each
-                   adapter's deps only load in its own mode.
-```
-
-Pipeline (in `core.ts`):
+Text processing pipeline:
 
 ```
 URL

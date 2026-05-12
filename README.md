@@ -108,20 +108,6 @@ Flags:
 
 Errors go to stderr with the same `[code] message` shape the MCP tool returns (see the table below), and the process exits with a non-zero status. The same env vars (`MARKFETCH_TIMEOUT_MS`, `MARKFETCH_MAX_BYTES`, `MARKFETCH_USER_AGENT`) apply in both modes.
 
-## Errors
-
-Every failure returns `[code] message` so agents can branch on prefix match without JSON parsing.
-
-| Code | When |
-|---|---|
-| `network_error` | DNS / TCP / TLS failure |
-| `http_error` | Non-2xx response (status code in message) |
-| `timeout` | Exceeded `MARKFETCH_TIMEOUT_MS` |
-| `unsupported_content_type` | Non-HTML response (PDF, JSON, etc.) — refused by design |
-| `extraction_failed` | Readability returned no article content. Common causes: JS-rendered SPAs, paywalls, body-less pages |
-| `too_large` | Response body or extracted markdown exceeds `MARKFETCH_MAX_BYTES` |
-| `save_failed` | `savePath` (MCP) or `-o` (CLI) provided and `fs.writeFile` rejected (e.g., missing parent dir, permissions) |
-
 ## What it is not
 
 - **Not a crawler.** No recursion, no `robots.txt` parsing, no rate-limit orchestration. One URL in, one document out.
