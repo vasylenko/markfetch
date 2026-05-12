@@ -143,7 +143,7 @@ test("CLI: -o <absolute-path> writes file, prints confirmation to stdout", async
     // Confirmation byte count must equal on-disk size (regression-guard
     // mirroring server.test.ts T2: catches anyone replacing Buffer.byteLength
     // with markdown.length).
-    const match = stdout.match(/^Saved (\d+) bytes to /);
+    const match = /^Saved (\d+) bytes to /.exec(stdout);
     assert.ok(match);
     const reported = Number(match![1]);
     const onDiskSize = (await stat(savePath)).size;

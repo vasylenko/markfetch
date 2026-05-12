@@ -51,7 +51,7 @@ function deriveClientHints(ua: string): {
   mobile: string;
   platform: string;
 } {
-  const versionMatch = ua.match(/\bChrome\/(\d+)/);
+  const versionMatch = /\bChrome\/(\d+)/.exec(ua);
   if (!versionMatch) {
     throw new Error(
       `Invalid MARKFETCH_USER_AGENT=${JSON.stringify(ua)} — expected a Chrome User-Agent containing "Chrome/<version>". Sec-CH-UA-* client hints are derived from this string and would be incoherent otherwise.`,
@@ -339,14 +339,14 @@ function extractArticle(
   const decoded = decodeEncodedCodeTags(html);
   const withBase = ensureBaseHref(decoded, url);
   const { document } = parseHTML(withBase);
-  rewriteForReadability(document as unknown as Document);
+  rewriteForReadability(document);
   // keepClasses: true preserves `class="language-X"` on <code> elements so
   // turndown's default fenced-code rule can emit the language hint after the
   // opening fence. Default Readability strips all classes except "page".
   // Other class attributes that survive (`headerlink`, etc.) are already
   // handled by our pre-Readability rewrites or are inert in turndown's
   // output, so this flag is safe in the observed corpus.
-  const article = new Readability(document as unknown as Document, {
+  const article = new Readability(document, {
     keepClasses: true,
   }).parse();
   if (!article?.content?.trim()) return null;
