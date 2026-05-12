@@ -17,12 +17,22 @@ import {
   rm,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, parse as parsePath, resolve as resolvePath } from "node:path";
+import { pathToFileURL } from "node:url";
+
+// Spawning the server through `node --import <absolute-file-url>` keeps the
+// command portable across hosts: the .bin/tsx wrapper is `tsx.cmd` on
+// Windows and a POSIX shell script elsewhere, neither of which is uniformly
+// spawnable. The absolute file URL also avoids depending on the spawned
+// process's cwd to resolve a bare `tsx` specifier.
+const TSX_LOADER_URL = pathToFileURL(
+  resolvePath("./node_modules/tsx/dist/loader.mjs"),
+).href;
 
 async function spawnClient(env: Record<string, string> = {}) {
   const transport = new StdioClientTransport({
-    command: "tsx",
-    args: ["src/index.ts"],
+    command: process.execPath,
+    args: ["--import", TSX_LOADER_URL, "src/index.ts"],
     env: { ...process.env, ...env } as Record<string, string>,
   });
   const client = new Client({ name: "markfetch-test", version: "0.0.0" });
@@ -646,7 +656,13 @@ test("savePath: writeFile rejection surfaces as [save_failed] with errno; file i
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     res.end(HAPPY_FIXTURE);
   });
-  const savePath = "/nonexistent-parent-zzz-savepath-test/out.md";
+  // Build a host-absolute path under a nonexistent directory off the
+  // filesystem root for whichever OS this is running on. POSIX:
+  // /nonexistent-…/out.md; Windows: <drive>:\nonexistent-…\out.md.
+  // parse(cwd).root returns the platform's root ("/" or "C:\\"); using it
+  // here keeps the test running on any host without hard-coding "/".
+  const root = parsePath(process.cwd()).root;
+  const savePath = join(root, "nonexistent-parent-zzz-savepath-test", "out.md");
   const client = await spawnClient();
   try {
     const result = await client.callTool({
@@ -666,6 +682,103 @@ test("savePath: writeFile rejection surfaces as [save_failed] with errno; file i
     await mock.close();
   }
 });
+
+// T5a — schema must reject a Windows-style absolute path on POSIX runners.
+// The path `C:\…` is absolute on Windows but not for the POSIX host the
+// server is running on; it should be rejected at the schema boundary, the
+// same way `relative/path.md` and `~/x.md` are.
+test(
+  "savePath: Windows-style absolute path is rejected on POSIX runners",
+  { skip: process.platform === "win32" },
+  async () => {
+    const mock = await startMock((_req, res) => {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(HAPPY_FIXTURE);
+    });
+    const client = await spawnClient();
+    try {
+      let caught = false;
+      let result: { isError?: boolean; content?: unknown } | undefined;
+      try {
+        result = (await client.callTool({
+          name: "fetch_markdown",
+          arguments: {
+            url: mock.url,
+            savePath: "C:\\nonexistent-parent-windows-style\\out.md",
+          },
+        })) as { isError?: boolean; content?: unknown };
+      } catch {
+        caught = true;
+      }
+      if (!caught) {
+        assert.equal(
+          result?.isError,
+          true,
+          "schema rejection must surface as isError",
+        );
+        const text = textOf(result as { content: unknown });
+        assert.ok(
+          !/^\[(network_error|http_error|timeout|unsupported_content_type|extraction_failed|too_large|save_failed)\]/.test(
+            text,
+          ),
+          `expected schema error, got tool [code] error (handler ran when it shouldn't have): ${text}`,
+        );
+      }
+    } finally {
+      await client.close();
+      await mock.close();
+    }
+  },
+);
+
+// T5b — schema must reject a POSIX-style absolute path on Windows runners.
+// The path `/foo` is absolute on POSIX and is *also* recognised by
+// path.isAbsolute on Windows, but the host-absolute contract on Windows
+// requires an explicit drive letter or UNC root. Without that, the schema
+// rejects.
+test(
+  "savePath: POSIX-style absolute path is rejected on Windows runners",
+  { skip: process.platform !== "win32" },
+  async () => {
+    const mock = await startMock((_req, res) => {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(HAPPY_FIXTURE);
+    });
+    const client = await spawnClient();
+    try {
+      let caught = false;
+      let result: { isError?: boolean; content?: unknown } | undefined;
+      try {
+        result = (await client.callTool({
+          name: "fetch_markdown",
+          arguments: {
+            url: mock.url,
+            savePath: "/nonexistent-parent-posix-style/out.md",
+          },
+        })) as { isError?: boolean; content?: unknown };
+      } catch {
+        caught = true;
+      }
+      if (!caught) {
+        assert.equal(
+          result?.isError,
+          true,
+          "schema rejection must surface as isError",
+        );
+        const text = textOf(result as { content: unknown });
+        assert.ok(
+          !/^\[(network_error|http_error|timeout|unsupported_content_type|extraction_failed|too_large|save_failed)\]/.test(
+            text,
+          ),
+          `expected schema error, got tool [code] error (handler ran when it shouldn't have): ${text}`,
+        );
+      }
+    } finally {
+      await client.close();
+      await mock.close();
+    }
+  },
+);
 
 // T6 — THE Invariant. PRD §5: file at savePath is only ever the markdown.
 test("savePath INVARIANT: fetch error + savePath → file is NOT written", async () => {

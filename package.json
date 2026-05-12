@@ -48,7 +48,7 @@
     "dev": "tsx src/index.ts",
     "build": "tsc",
     "postbuild": "node scripts/postbuild.mjs",
-    "test": "tsx --test tests/*.test.ts",
+    "test": "node scripts/run-tests.mjs",
     "inspect": "npm run build && npx @modelcontextprotocol/inspector node dist/index.js",
     "prepublishOnly": "npm run build"
   },

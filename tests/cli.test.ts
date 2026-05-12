@@ -14,14 +14,22 @@ import {
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve as resolvePath } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const execFileAsync = promisify(execFile);
 
 // Resolved at module load against the test runner's cwd (the project root).
-// Tests that override `cwd` to a tmpdir still need to find the tsx binary
-// and the source entry — passing relative paths would resolve against the
-// new cwd and produce a confusing ENOENT instead of the behavior under test.
-const TSX_BIN = resolvePath("./node_modules/.bin/tsx");
+// Tests that override `cwd` to a tmpdir still need to find the tsx loader
+// and the source entry — passing relative paths or bare module specifiers
+// would resolve against the new cwd and produce a confusing ENOENT (or fail
+// module resolution) instead of the behavior under test. Going through
+// `node --import <absolute-file-url>` also sidesteps the Windows wrapper
+// problem: the .bin shim is `tsx.cmd` on Windows and a shell script on
+// POSIX, neither of which child_process can spawn uniformly across hosts.
+const NODE_BIN = process.execPath;
+const TSX_LOADER_URL = pathToFileURL(
+  resolvePath("./node_modules/tsx/dist/loader.mjs"),
+).href;
 const ENTRY = resolvePath("src/index.ts");
 
 const HAPPY_FIXTURE = `<!DOCTYPE html>
@@ -80,8 +88,8 @@ async function runCli(
 ): Promise<RunResult> {
   try {
     const { stdout, stderr } = await execFileAsync(
-      TSX_BIN,
-      [ENTRY, ...args],
+      NODE_BIN,
+      ["--import", TSX_LOADER_URL, ENTRY, ...args],
       {
         env: { ...process.env, ...env } as Record<string, string>,
         cwd,
