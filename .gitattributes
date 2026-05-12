@@ -1,0 +1,6 @@
+# Pin line endings to LF for test fixtures and their expected snapshots so
+# `snapshots.test.ts` produces identical bytes on POSIX and Windows runners.
+# Git's `core.autocrlf=true` default on Windows would otherwise translate LF
+# blobs to CRLF on checkout, breaking the byte-exact diff against markfetch's
+# LF-only markdown output.
+tests/fixtures/** text eol=lf
