@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Resolved 5 minor SonarQube findings (S4325 redundant `Document` casts, S6594 `String#match` → `RegExp#exec`) — no behavior change, all 50 tests pass. ([c993938](https://github.com/vasylenko/markfetch/commit/c9939385edfbe95f7f34a24ba8e33e5a74ac07f4))
+
 ## [0.5.0] - 2026-05-12
 
 ### Added
