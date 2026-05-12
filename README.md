@@ -32,7 +32,7 @@ markfetch https://en.wikipedia.org/wiki/Markdown
 }
 ```
 
-That snippet is the whole MCP setup — or jump to [CLI usage](#cli-usage) to drive the same binary from a shell.
+That snippet is the whole MCP setup — or jump to [CLI usage](#cli-usage) to drive the same command from a shell.
 
 ## MCP install commands
 
@@ -73,7 +73,7 @@ gemini mcp add -s user markfetch npx -y markfetch
 
 - **Stdio-clean.** Stdout is reserved for MCP frames. Stderr is fatal-only. No log spam, no ANSI escapes that could corrupt protocol framing.
 
-- **Pure Node, no subprocesses.** No Playwright, no headless Chromium, no Python hop. Single TypeScript executable on Node 24+ — one process whether you invoke it as an MCP server or from the shell.
+- **Pure Node, no subprocesses.** No Playwright, no headless Chromium, no Python hop. Single Node process — one Node process whether you invoke it as an MCP server or from the shell.
 
 ## CLI usage
 
@@ -142,7 +142,7 @@ Pass overrides via the `env` block of your MCP client config:
 
 Requires Node.js ≥ 24.
 
-When iterating on CLI changes, `tsx src/index.ts <url>` and `tsx src/index.ts --help` route through the same argv-discriminated dispatcher as the compiled binary — no rebuild needed between edits.
+When iterating on CLI changes, `tsx src/index.ts <url>` and `tsx src/index.ts --help` route through the same argv-discriminated dispatcher as the built `dist/index.js` — no rebuild needed between edits.
 
 To point an MCP client at a local source build, swap `npx` for `node` + an absolute path to `dist/index.js`:
 

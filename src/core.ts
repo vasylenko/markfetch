@@ -83,11 +83,11 @@ function deriveClientHints(ua: string): {
 const clientHints = deriveClientHints(config.userAgent);
 
 // Enable HTTP/2 via TLS ALPN. Modern bot-detection systems and CDNs consider
-// wire protocol alongside header fingerprint; HTTP/2 paired with a Chrome
-// header set is internally consistent, HTTP/1.1 + Chrome headers is not.
-// Servers that don't advertise h2 in ALPN fall back to HTTP/1.1 transparently
-// during the TLS handshake — no manual retry needed. Plain-HTTP connections
-// (port 80) skip ALPN entirely and use HTTP/1.1.
+// wire protocol alongside header fingerprint; HTTP/2 over TLS pairs cleanly
+// with a Chrome header set. Servers that don't advertise h2 in ALPN fall back
+// to HTTP/1.1 transparently during the TLS handshake — no manual retry needed.
+// Plain-HTTP connections (port 80) skip ALPN entirely and use HTTP/1.1,
+// accepting the protocol/fingerprint mismatch in that case.
 setGlobalDispatcher(new Agent({ allowH2: true }));
 
 const TURNDOWN = new TurndownService({
@@ -165,7 +165,8 @@ export function classifyError(err: unknown): { code: ErrorCode; message: string 
   if (err instanceof MarkfetchError) {
     return { code: err.code, message: err.message };
   }
-  // AbortSignal.timeout produces DOMException with name "TimeoutError".
+  // AbortSignal.timeout normally produces a DOMException named "TimeoutError";
+  // some undici code paths surface AbortError instead, so accept both.
   if (
     err instanceof Error &&
     (err.name === "TimeoutError" || err.name === "AbortError")

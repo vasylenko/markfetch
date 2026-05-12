@@ -18,7 +18,7 @@ import { join, resolve as resolvePath } from "node:path";
 const execFileAsync = promisify(execFile);
 
 // Resolved at module load against the test runner's cwd (the project root).
-// Tests that override `cwd` to a tmpdir still need to find the tsx binary
+// Tests that override `cwd` to a tmpdir still need to find the tsx CLI
 // and the source entry — passing relative paths would resolve against the
 // new cwd and produce a confusing ENOENT instead of the behavior under test.
 const TSX_BIN = resolvePath("./node_modules/.bin/tsx");

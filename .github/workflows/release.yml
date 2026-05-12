@@ -58,8 +58,9 @@ jobs:
           TAG_NAME: ${{ github.ref_name }}
         run: |
           VERSION=${TAG_NAME#v}
-          # Print everything between "## [VERSION]" and the next "## [" header.
-          # The trailing blank lines are trimmed by awk's NR/sub trick below.
+          # Prints lines after the matched "## [VERSION]" header until the
+          # next "## [" header (or EOF). The matched header line itself is
+          # skipped via `next`.
           CHANGELOG_BODY=$(awk -v ver="$VERSION" '
             /^## \[/ {
               if (found) exit
