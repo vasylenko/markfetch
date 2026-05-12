@@ -22,6 +22,23 @@ The built-in fetch tools that ship with AI coding agents return raw HTML, broken
 
 Drop the snippet into your MCP client config (Claude Desktop / Claude Code / Cursor / Goose / any stdio-MCP client). That's the whole setup.
 
+## Quick install commands
+
+### Claude Code
+```
+claude mcp add --scope user markfetch -- npx -y markfetch
+```
+
+### Codex
+```
+codex mcp add markfetch -- npx -y markfetch
+```
+
+### Gemini CLI
+```
+gemini mcp add -s user markfetch npx -y markfetch
+```
+
 ## Why markfetch?
 
 |  | Real-browser fingerprint | Reader-View extraction | Structured errors | Zero config |
