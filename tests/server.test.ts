@@ -556,7 +556,7 @@ test("savePath multibyte: confirmation byte count === stat(file).size", async ()
       });
       assert.equal(result.isError, false);
       const text = textOf(result);
-      const match = text.match(/^Saved (\d+) bytes to /);
+      const match = /^Saved (\d+) bytes to /.exec(text);
       assert.ok(match, `confirmation must declare a byte count: got ${text}`);
       const reportedBytes = Number(match[1]);
       const onDisk = await stat(savePath);
