@@ -355,10 +355,14 @@ test("error: too_large via post-decode body-bytes check (chunked, no Content-Len
 });
 
 test("env-var validation: invalid MARKFETCH_TIMEOUT_MS fails fast at startup", async () => {
-  const child = spawn("./node_modules/.bin/tsx", ["src/index.ts"], {
-    env: { ...process.env, MARKFETCH_TIMEOUT_MS: "abc" },
-    stdio: ["pipe", "pipe", "pipe"],
-  });
+  const child = spawn(
+    process.execPath,
+    ["--import", TSX_LOADER_URL, "src/index.ts"],
+    {
+      env: { ...process.env, MARKFETCH_TIMEOUT_MS: "abc" },
+      stdio: ["pipe", "pipe", "pipe"],
+    },
+  );
   let stderr = "";
   child.stderr.on("data", (d: Buffer) => {
     stderr += d.toString();
@@ -372,10 +376,14 @@ test("env-var validation: invalid MARKFETCH_TIMEOUT_MS fails fast at startup", a
 });
 
 test("env-var validation: negative MARKFETCH_MAX_BYTES is rejected", async () => {
-  const child = spawn("./node_modules/.bin/tsx", ["src/index.ts"], {
-    env: { ...process.env, MARKFETCH_MAX_BYTES: "-1" },
-    stdio: ["pipe", "pipe", "pipe"],
-  });
+  const child = spawn(
+    process.execPath,
+    ["--import", TSX_LOADER_URL, "src/index.ts"],
+    {
+      env: { ...process.env, MARKFETCH_MAX_BYTES: "-1" },
+      stdio: ["pipe", "pipe", "pipe"],
+    },
+  );
   let stderr = "";
   child.stderr.on("data", (d: Buffer) => {
     stderr += d.toString();
@@ -388,13 +396,17 @@ test("env-var validation: negative MARKFETCH_MAX_BYTES is rejected", async () =>
 });
 
 test("env-var validation: non-Chrome MARKFETCH_USER_AGENT fails fast at startup", async () => {
-  const child = spawn("./node_modules/.bin/tsx", ["src/index.ts"], {
-    env: {
-      ...process.env,
-      MARKFETCH_USER_AGENT: "Mozilla/5.0 (X11; FreeBSD) Firefox/120.0",
+  const child = spawn(
+    process.execPath,
+    ["--import", TSX_LOADER_URL, "src/index.ts"],
+    {
+      env: {
+        ...process.env,
+        MARKFETCH_USER_AGENT: "Mozilla/5.0 (X11; FreeBSD) Firefox/120.0",
+      },
+      stdio: ["pipe", "pipe", "pipe"],
     },
-    stdio: ["pipe", "pipe", "pipe"],
-  });
+  );
   let stderr = "";
   child.stderr.on("data", (d: Buffer) => {
     stderr += d.toString();
