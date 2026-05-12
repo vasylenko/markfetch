@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-05-12
+
 ### Added
 - CLI mode — `markfetch <url>` fetches a URL and prints clean markdown to stdout. `-o, --output <path>` writes to a file (absolute or relative; relative paths resolve against cwd) with a confirmation on stdout. `--help` / `--version` work as expected. Bare `markfetch` (zero arguments) continues to start the MCP stdio server, so every existing MCP client config keeps working unchanged.
 - `commander` runtime dependency (v14.x, 0 transitive deps) — used by the CLI adapter for argv parsing, help, and version.

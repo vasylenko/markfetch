@@ -88,7 +88,7 @@ test("e2e: compiled binary boots, exposes fetch_markdown, pins version", async (
   try {
     const info = client.getServerVersion();
     assert.equal(info?.name, "markfetch");
-    assert.equal(info?.version, "0.4.1");
+    assert.equal(info?.version, "0.5.0");
     const { tools } = await client.listTools();
     assert.equal(tools.length, 1);
     assert.equal(tools[0].name, "fetch_markdown");
@@ -189,12 +189,12 @@ test("e2e: compiled binary CLI prints markdown to stdout, exit 0", async () => {
   }
 });
 
-test("e2e: compiled binary --version prints 0.4.1, exit 0", async () => {
+test("e2e: compiled binary --version prints package version, exit 0", async () => {
   const { stdout, stderr } = await execFileAsync(
     "node",
     [BUILT_BIN, "--version"],
     { timeout: 10_000 },
   );
   assert.equal(stderr, "");
-  assert.equal(stdout, "0.4.1\n");
+  assert.equal(stdout, "0.5.0\n");
 });

@@ -23,7 +23,7 @@ program
     "Fetch a URL and return clean markdown.\n" +
       "Run with no arguments to start the MCP stdio server.",
   )
-  .version("0.4.1")
+  .version("0.5.0")
   .argument("<url>", "absolute http(s) URL to fetch")
   .option(
     "-o, --output <path>",

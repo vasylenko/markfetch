@@ -1,13 +1,25 @@
 # markfetch
 
-**Reader View for AI agents. Fetch any URL, get back clean markdown — at a real Chrome's request rate, not curl's.**
+**Reader View for AI agents and your shell. Fetch any URL, get back clean markdown — at a real Chrome's request rate, not curl's.**
 
 [![npm](https://img.shields.io/npm/v/markfetch.svg?color=10b981&label=npm)](https://www.npmjs.com/package/markfetch)
 [![ci](https://github.com/vasylenko/markfetch/actions/workflows/ci.yml/badge.svg)](https://github.com/vasylenko/markfetch/actions/workflows/ci.yml)
 [![node](https://img.shields.io/node/v/markfetch.svg?color=10b981)](https://nodejs.org/)
 [![license](https://img.shields.io/npm/l/markfetch.svg?color=10b981)](https://github.com/vasylenko/markfetch/blob/main/LICENSE)
 
-The built-in fetch tools that ship with AI coding agents return raw HTML, broken markdown, or `403` from Cloudflare more often than you'd like. `markfetch` is an MCP server that sends **HTTP/2 with a coherent Chrome header set** so bot-detection systems see a real browser, then runs the response through the **same Reader View pipeline your browser uses** (Mozilla's Readability → turndown). The output is markdown indistinguishable from a human running "Save as Markdown" — on sites that would block a naive curl.
+The built-in fetch tools that ship with AI coding agents return raw HTML, broken markdown, or `403` from Cloudflare more often than you'd like. `markfetch` sends **HTTP/2 with a coherent Chrome header set** so bot-detection systems see a real browser, then runs the response through the **same Reader View pipeline your browser uses** (Mozilla's Readability → turndown). The output is markdown indistinguishable from a human running "Save as Markdown" — on sites that would block a naive curl.
+
+One command, two surfaces:
+
+- **CLI** — pass a URL. Print to stdout or `-o` to a file.
+```
+npm i -g markfetch
+
+markfetch https://en.wikipedia.org/wiki/Markdown
+
+```
+
+- **MCP stdio server** — bare invocation. Drop into Claude Desktop / Claude Code / Cursor / Goose / any stdio-MCP client.
 
 ```json
 {
@@ -20,9 +32,9 @@ The built-in fetch tools that ship with AI coding agents return raw HTML, broken
 }
 ```
 
-Drop the snippet into your MCP client config (Claude Desktop / Claude Code / Cursor / Goose / any stdio-MCP client). That's the whole setup — or jump to [CLI usage](#cli-usage) to use the same binary from a shell.
+That snippet is the whole MCP setup — or jump to [CLI usage](#cli-usage) to drive the same binary from a shell.
 
-## Quick install commands
+## MCP install commands
 
 ### Claude Code
 ```
@@ -53,15 +65,15 @@ gemini mcp add -s user markfetch npx -y markfetch
 
 - **Reader-View-quality extraction.** [linkedom](https://github.com/WebReflection/linkedom) → [@mozilla/readability](https://github.com/mozilla/readability) → [turndown](https://github.com/mixmark-io/turndown) with GFM tables, strikethrough, and task lists. Code fences preserve `language-X` hints. Sphinx-style bare `<pre>` blocks render as code, not escaped prose. Intraword underscores stay un-escaped — no more `list\_tools`.
 
-- **One tool, one shape.** `fetch_markdown(url, savePath?)` returns markdown in `content[0].text`. No `structuredContent`, no frontmatter, no metadata fields. Modern MCP clients hide `content[]` when `structuredContent` is present — `markfetch` deliberately stays on the channel your LLM can actually read.
+- **One tool, one shape (MCP).** `fetch_markdown(url, savePath?)` returns markdown in `content[0].text`. No `structuredContent`, no frontmatter, no metadata fields. Modern MCP clients hide `content[]` when `structuredContent` is present — `markfetch` deliberately stays on the channel your LLM can actually read.
 
-- **`savePath` escape valve.** Pass an absolute path and the markdown lands on disk instead of `content[0].text`. Use it when your client's inline tool-result cap would truncate large responses. The file is only ever the markdown of the URL — fetch errors return a `[code]` string and never touch the disk.
+- **`savePath` / `-o` escape valve.** Pass an absolute path (MCP `savePath`) or `-o <path>` (CLI) and the markdown lands on disk instead of the response channel. Use it when your client's inline tool-result cap would truncate large responses, or to redirect output from a shell pipeline. The file is only ever the markdown of the URL — fetch errors return a `[code]` string and never touch the disk.
 
 - **Whole document or honest failure.** No pagination, no truncation. If the document doesn't fit in `MARKFETCH_MAX_BYTES`, you get `too_large` — never a half-truth.
 
 - **Stdio-clean.** Stdout is reserved for MCP frames. Stderr is fatal-only. No log spam, no ANSI escapes that could corrupt protocol framing.
 
-- **Pure Node, no subprocesses.** No Playwright, no headless Chromium, no Python hop. Single TypeScript MCP server on Node 24+.
+- **Pure Node, no subprocesses.** No Playwright, no headless Chromium, no Python hop. Single TypeScript executable on Node 24+ — one process whether you invoke it as an MCP server or from the shell.
 
 ## CLI usage
 
@@ -108,7 +120,7 @@ Every failure returns `[code] message` so agents can branch on prefix match with
 | `unsupported_content_type` | Non-HTML response (PDF, JSON, etc.) — refused by design |
 | `extraction_failed` | Readability returned no article content. Common causes: JS-rendered SPAs, paywalls, body-less pages |
 | `too_large` | Response body or extracted markdown exceeds `MARKFETCH_MAX_BYTES` |
-| `save_failed` | `savePath` provided and `fs.writeFile` rejected (e.g., missing parent dir, permissions) |
+| `save_failed` | `savePath` (MCP) or `-o` (CLI) provided and `fs.writeFile` rejected (e.g., missing parent dir, permissions) |
 
 ## What it is not
 

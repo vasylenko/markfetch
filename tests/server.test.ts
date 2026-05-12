@@ -81,7 +81,7 @@ test("server boots over stdio and completes the initialize handshake", async () 
   try {
     const info = client.getServerVersion();
     assert.equal(info?.name, "markfetch");
-    assert.equal(info?.version, "0.4.1");
+    assert.equal(info?.version, "0.5.0");
   } finally {
     await client.close();
   }
