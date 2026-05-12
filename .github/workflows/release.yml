@@ -79,10 +79,14 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Create Release
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: ${{ github.ref_name }}
-          body: ${{ env.CHANGELOG_BODY }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          printf '%s\n' "$CHANGELOG_BODY" | gh release create "$TAG_NAME" \
+            --repo=${{ github.repository }} \
+            --title="$TAG_NAME" \
+            --notes-file -
 
   npm-publish:
     needs: verify-ci
