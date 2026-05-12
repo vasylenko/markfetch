@@ -198,3 +198,67 @@ test("e2e: compiled binary --version prints package version, exit 0", async () =
   assert.equal(stderr, "");
   assert.equal(stdout, "0.5.0\n");
 });
+
+// Real-URL e2e against the live Claude Code docs page. Mock-server tests
+// above cover correctness of the extraction pipeline against deterministic
+// fixtures; these add a thin smoke layer against an actual public page so
+// regressions that only show up against real markup (charset quirks, TLS,
+// redirects, gzip, etc.) get caught. Assertions are intentionally loose —
+// substantive byte count, no leaked HTML, and the page's subject mentioned —
+// so a routine docs-site copy edit doesn't fail CI. Hard 30s timeout so a
+// network blip on a runner fails loudly instead of hanging the whole job.
+const REAL_URL = "https://code.claude.com/docs/en/how-claude-code-works";
+
+test("e2e: real URL via compiled CLI prints markdown to stdout, exit 0", async () => {
+  const { stdout, stderr } = await execFileAsync(
+    "node",
+    [BUILT_BIN, REAL_URL],
+    { timeout: 30_000, maxBuffer: 5_000_000 },
+  );
+  assert.equal(stderr, "", "stderr must stay empty on happy path");
+  assert.ok(
+    stdout.length > 1000,
+    `expected substantive markdown body, got ${stdout.length} bytes`,
+  );
+  assert.match(stdout, /Claude/, "page about Claude Code must mention Claude");
+  assert.ok(
+    !/<\s*(script|html|body)[\s>]/i.test(stdout),
+    "Readability + turndown must strip raw HTML tags",
+  );
+});
+
+test("e2e: real URL with savePath writes file, byte count matches stat size", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "mf-e2e-real-savepath-"));
+  const savePath = join(dir, "how-claude-code-works.md");
+  const client = await spawnCompiled();
+  try {
+    const result = await client.callTool({
+      name: "fetch_markdown",
+      arguments: { url: REAL_URL, savePath },
+    });
+    assert.equal(
+      result.isError,
+      false,
+      `expected success, got: ${textOf(result)}`,
+    );
+    const confirmation = textOf(result);
+    assert.ok(
+      confirmation.startsWith("Saved ") &&
+        confirmation.endsWith(` bytes to ${savePath}`),
+      `expected 'Saved N bytes to ${savePath}', got: ${confirmation}`,
+    );
+    const match = /^Saved (\d+) bytes to /.exec(confirmation);
+    assert.ok(match, "confirmation must include a byte count");
+    const reported = Number(match[1]);
+    const onDisk = await readFile(savePath, "utf8");
+    assert.equal(
+      Buffer.byteLength(onDisk, "utf8"),
+      reported,
+      "confirmation byte count must equal on-disk size (the invariant catches anyone replacing Buffer.byteLength with markdown.length)",
+    );
+    assert.match(onDisk, /Claude/, "saved file must contain the page content");
+  } finally {
+    await client.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
