@@ -594,8 +594,16 @@ test("savePath multibyte: confirmation byte count === stat(file).size", async ()
   });
 });
 
-// T3 — F27-style boundary check, extended for save_failed
-test("savePath: relative path is rejected at the schema boundary, not by the handler", async () => {
+// Shared scaffolding for the four schema-rejection tests below. The MCP SDK
+// can surface a Zod failure two ways: as a thrown CallTool error (caught
+// path) or as `{ isError: true }` with text content (the not-caught path).
+// Either is valid — both mean the handler never ran. The runtime error
+// codes are listed explicitly so a regression that lets the handler execute
+// and produce e.g. `[save_failed]` fails this check loudly.
+const RUNTIME_ERROR_CODE_PATTERN =
+  /^\[(network_error|http_error|timeout|unsupported_content_type|extraction_failed|too_large|save_failed)\]/;
+
+async function assertSchemaRejectsSavePath(savePath: string) {
   const mock = await startMock((_req, res) => {
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     res.end(HAPPY_FIXTURE);
@@ -607,18 +615,20 @@ test("savePath: relative path is rejected at the schema boundary, not by the han
     try {
       result = (await client.callTool({
         name: "fetch_markdown",
-        arguments: { url: mock.url, savePath: "relative/path.md" },
+        arguments: { url: mock.url, savePath },
       })) as { isError?: boolean; content?: unknown };
     } catch {
       caught = true;
     }
     if (!caught) {
-      assert.equal(result?.isError, true, "schema rejection must surface as isError");
+      assert.equal(
+        result?.isError,
+        true,
+        "schema rejection must surface as isError",
+      );
       const text = textOf(result as { content: unknown });
       assert.ok(
-        !/^\[(network_error|http_error|timeout|unsupported_content_type|extraction_failed|too_large|save_failed)\]/.test(
-          text,
-        ),
+        !RUNTIME_ERROR_CODE_PATTERN.test(text),
         `expected schema error, got tool [code] error (handler ran when it shouldn't have): ${text}`,
       );
     }
@@ -626,40 +636,16 @@ test("savePath: relative path is rejected at the schema boundary, not by the han
     await client.close();
     await mock.close();
   }
+}
+
+// T3 — F27-style boundary check, extended for save_failed
+test("savePath: relative path is rejected at the schema boundary, not by the handler", async () => {
+  await assertSchemaRejectsSavePath("relative/path.md");
 });
 
 // T4 — locks the deliberate no-tilde-expansion decision
 test("savePath: tilde-path '~/x.md' is rejected at the schema boundary (no auto-expansion)", async () => {
-  const mock = await startMock((_req, res) => {
-    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    res.end(HAPPY_FIXTURE);
-  });
-  const client = await spawnClient();
-  try {
-    let caught = false;
-    let result: { isError?: boolean; content?: unknown } | undefined;
-    try {
-      result = (await client.callTool({
-        name: "fetch_markdown",
-        arguments: { url: mock.url, savePath: "~/x.md" },
-      })) as { isError?: boolean; content?: unknown };
-    } catch {
-      caught = true;
-    }
-    if (!caught) {
-      assert.equal(result?.isError, true);
-      const text = textOf(result as { content: unknown });
-      assert.ok(
-        !/^\[(network_error|http_error|timeout|unsupported_content_type|extraction_failed|too_large|save_failed)\]/.test(
-          text,
-        ),
-        `tilde path must be rejected at schema, not by handler: ${text}`,
-      );
-    }
-  } finally {
-    await client.close();
-    await mock.close();
-  }
+  await assertSchemaRejectsSavePath("~/x.md");
 });
 
 // T5
@@ -703,43 +689,9 @@ test(
   "savePath: Windows-style absolute path is rejected on POSIX runners",
   { skip: process.platform === "win32" },
   async () => {
-    const mock = await startMock((_req, res) => {
-      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      res.end(HAPPY_FIXTURE);
-    });
-    const client = await spawnClient();
-    try {
-      let caught = false;
-      let result: { isError?: boolean; content?: unknown } | undefined;
-      try {
-        result = (await client.callTool({
-          name: "fetch_markdown",
-          arguments: {
-            url: mock.url,
-            savePath: "C:\\nonexistent-parent-windows-style\\out.md",
-          },
-        })) as { isError?: boolean; content?: unknown };
-      } catch {
-        caught = true;
-      }
-      if (!caught) {
-        assert.equal(
-          result?.isError,
-          true,
-          "schema rejection must surface as isError",
-        );
-        const text = textOf(result as { content: unknown });
-        assert.ok(
-          !/^\[(network_error|http_error|timeout|unsupported_content_type|extraction_failed|too_large|save_failed)\]/.test(
-            text,
-          ),
-          `expected schema error, got tool [code] error (handler ran when it shouldn't have): ${text}`,
-        );
-      }
-    } finally {
-      await client.close();
-      await mock.close();
-    }
+    await assertSchemaRejectsSavePath(
+      String.raw`C:\nonexistent-parent-windows-style\out.md`,
+    );
   },
 );
 
@@ -752,43 +704,7 @@ test(
   "savePath: POSIX-style absolute path is rejected on Windows runners",
   { skip: process.platform !== "win32" },
   async () => {
-    const mock = await startMock((_req, res) => {
-      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      res.end(HAPPY_FIXTURE);
-    });
-    const client = await spawnClient();
-    try {
-      let caught = false;
-      let result: { isError?: boolean; content?: unknown } | undefined;
-      try {
-        result = (await client.callTool({
-          name: "fetch_markdown",
-          arguments: {
-            url: mock.url,
-            savePath: "/nonexistent-parent-posix-style/out.md",
-          },
-        })) as { isError?: boolean; content?: unknown };
-      } catch {
-        caught = true;
-      }
-      if (!caught) {
-        assert.equal(
-          result?.isError,
-          true,
-          "schema rejection must surface as isError",
-        );
-        const text = textOf(result as { content: unknown });
-        assert.ok(
-          !/^\[(network_error|http_error|timeout|unsupported_content_type|extraction_failed|too_large|save_failed)\]/.test(
-            text,
-          ),
-          `expected schema error, got tool [code] error (handler ran when it shouldn't have): ${text}`,
-        );
-      }
-    } finally {
-      await client.close();
-      await mock.close();
-    }
+    await assertSchemaRejectsSavePath("/nonexistent-parent-posix-style/out.md");
   },
 );
 
