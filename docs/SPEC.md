@@ -25,7 +25,7 @@ Errors throw `MarkfetchError` uniformly from core; adapters catch once. Codes: `
 
 - **HTTP/2 + coherent Chrome fingerprint.** Wire protocol, headers, and UA must agree — a Chrome UA over HTTP/1.1 or without `Sec-CH-UA-*` is *more* suspicious than curl. `Sec-CH-UA-*` is derived from `MARKFETCH_USER_AGENT` at startup so override-coherence is mechanical.
 
-- **Single-channel MCP response.** `content[0].text` only. Modern MCP clients hide `content[]` when `structuredContent` is present, which would route the response away from the LLM that called the tool.
+- **Single-channel MCP response.** `content[0].text` only. Several major MCP clients (Claude Code CLI, VS Code/Copilot) forward only `structuredContent` to the model and drop `content[]` when both are present — a single-channel response keeps the markdown reachable from those clients.
 
 - **Whole document or `too_large`.** No pagination. Partial content lets the agent reason over truncated bodies without knowing they're truncated. `savePath` / `-o` is the escape valve for genuinely large documents.
 

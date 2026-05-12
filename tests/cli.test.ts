@@ -21,7 +21,7 @@ const execFileAsync = promisify(execFile);
 // Tests that override `cwd` to a tmpdir still need to find the tsx CLI
 // and the source entry — passing relative paths would resolve against the
 // new cwd and produce a confusing ENOENT instead of the behavior under test.
-const TSX_BIN = resolvePath("./node_modules/.bin/tsx");
+const TSX_CLI = resolvePath("./node_modules/.bin/tsx");
 const ENTRY = resolvePath("src/index.ts");
 
 const HAPPY_FIXTURE = `<!DOCTYPE html>
@@ -80,7 +80,7 @@ async function runCli(
 ): Promise<RunResult> {
   try {
     const { stdout, stderr } = await execFileAsync(
-      TSX_BIN,
+      TSX_CLI,
       [ENTRY, ...args],
       {
         env: { ...process.env, ...env } as Record<string, string>,

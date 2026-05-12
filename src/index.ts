@@ -3,7 +3,7 @@
 // Argv-discriminated dispatcher.
 //
 // `process.argv.length === 2` means the user provided zero arguments
-// (argv[0] is the node binary, argv[1] is this script path). That's the
+// (argv[0] is the path to node, argv[1] is this script path). That's the
 // shape every MCP client uses when spawning a server — so bare invocation
 // routes to the MCP adapter and preserves every existing client config.
 //
