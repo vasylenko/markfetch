@@ -20,7 +20,7 @@ The built-in fetch tools that ship with AI coding agents return raw HTML, broken
 }
 ```
 
-Drop the snippet into your MCP client config (Claude Desktop / Claude Code / Cursor / Goose / any stdio-MCP client). That's the whole setup.
+Drop the snippet into your MCP client config (Claude Desktop / Claude Code / Cursor / Goose / any stdio-MCP client). That's the whole setup — or jump to [CLI usage](#cli-usage) to use the same binary from a shell.
 
 ## Quick install commands
 
@@ -62,6 +62,39 @@ gemini mcp add -s user markfetch npx -y markfetch
 - **Stdio-clean.** Stdout is reserved for MCP frames. Stderr is fatal-only. No log spam, no ANSI escapes that could corrupt protocol framing.
 
 - **Pure Node, no subprocesses.** No Playwright, no headless Chromium, no Python hop. Single TypeScript MCP server on Node 24+.
+
+## CLI usage
+
+`markfetch` doubles as a shell tool: when invoked with at least one argument it parses argv as a CLI instead of starting the MCP server. Bare invocation (zero args) keeps the existing MCP-server behavior — every MCP client config in the wild keeps working unchanged.
+
+```sh
+# Print clean markdown to stdout
+npx -y markfetch https://example.com/article
+
+# Save to a file (absolute or relative path)
+npx -y markfetch https://example.com/article -o article.md
+
+# Pipe into another tool
+npx -y markfetch https://example.com/article | pandoc -o article.pdf
+```
+
+For repeat use, install once:
+
+```sh
+npm i -g markfetch         # then anywhere: markfetch <url>
+# or, as a project devDependency
+npm i -D markfetch         # then in package.json scripts: "markfetch <url>"
+```
+
+Flags:
+
+| Flag | Purpose |
+|---|---|
+| `-o, --output <path>` | Save markdown to a file (absolute or relative path). Default is stdout. |
+| `-V, --version` | Print version and exit. |
+| `-h, --help` | Print usage and exit. |
+
+Errors go to stderr with the same `[code] message` shape the MCP tool returns (see the table below), and the process exits with a non-zero status. The same env vars (`MARKFETCH_TIMEOUT_MS`, `MARKFETCH_MAX_BYTES`, `MARKFETCH_USER_AGENT`) apply in both modes.
 
 ## Errors
 
@@ -110,6 +143,8 @@ Pass overrides via the `env` block of your MCP client config:
 ## Develop
 
 Requires Node.js ≥ 24.
+
+When iterating on CLI changes, `tsx src/index.ts <url>` and `tsx src/index.ts --help` route through the same argv-discriminated dispatcher as the compiled binary — no rebuild needed between edits.
 
 To point an MCP client at a local source build, swap `npx` for `node` + an absolute path to `dist/index.js`:
 

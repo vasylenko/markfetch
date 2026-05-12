@@ -5,7 +5,8 @@
 // runtime logic.
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
-import { execSync } from "node:child_process";
+import { execFile, execSync } from "node:child_process";
+import { promisify } from "node:util";
 import {
   createServer,
   type IncomingMessage,
@@ -15,7 +16,13 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve as resolvePath } from "node:path";
+
+const execFileAsync = promisify(execFile);
+
+// Resolved absolute paths so a test that overrides cwd still locates the
+// built binary. node is on PATH, so a bare command name is fine for it.
+const BUILT_BIN = resolvePath("dist/index.js");
 
 before(() => {
   // Always rebuild so e2e tests run against current source, not a stale dist/.
@@ -157,4 +164,37 @@ test("e2e: compiled binary writes markdown to savePath, returns confirmation", a
     await mock.close();
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+// CLI-mode e2e tests. These spawn the compiled binary with arguments so the
+// dispatcher in dist/index.js routes to dist/cli.js — exercising the lazy
+// import path that tsc must emit correctly. If the corresponding cli.test
+// passes but these fail, the bug is in the build pipeline, not runtime logic.
+
+test("e2e: compiled binary CLI prints markdown to stdout, exit 0", async () => {
+  const mock = await startMock((_req, res) => {
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    res.end(HAPPY_FIXTURE);
+  });
+  try {
+    const { stdout, stderr } = await execFileAsync(
+      "node",
+      [BUILT_BIN, mock.url],
+      { timeout: 10_000, maxBuffer: 5_000_000 },
+    );
+    assert.equal(stderr, "", "stderr must stay empty on happy path");
+    assert.match(stdout, /E2E Fixture Heading/);
+  } finally {
+    await mock.close();
+  }
+});
+
+test("e2e: compiled binary --version prints 0.4.1, exit 0", async () => {
+  const { stdout, stderr } = await execFileAsync(
+    "node",
+    [BUILT_BIN, "--version"],
+    { timeout: 10_000 },
+  );
+  assert.equal(stderr, "");
+  assert.equal(stdout, "0.4.1\n");
 });

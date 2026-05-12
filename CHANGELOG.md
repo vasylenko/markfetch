@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- CLI mode — `markfetch <url>` fetches a URL and prints clean markdown to stdout. `-o, --output <path>` writes to a file (absolute or relative; relative paths resolve against cwd) with a confirmation on stdout. `--help` / `--version` work as expected. Bare `markfetch` (zero arguments) continues to start the MCP stdio server, so every existing MCP client config keeps working unchanged.
+- `commander` runtime dependency (v14.x, 0 transitive deps) — used by the CLI adapter for argv parsing, help, and version.
+
+### Changed
+- Source restructured into `src/core.ts` (pipeline + errors), `src/mcp.ts` (MCP adapter), `src/cli.ts` (CLI adapter), and `src/index.ts` (argv-discriminated dispatcher that lazy-imports the right adapter based on `process.argv.length`). No public-API change for MCP consumers — tool name, input schema, error codes, and output shape are byte-identical to 0.4.1. The lazy-import dispatcher makes the "stdout is reserved for MCP frames" invariant structural: `cli.ts` is never loaded in MCP mode, so no code that calls `console.log` is reachable from the MCP path.
+- 3 inline `return errorResult(...)` sites in the MCP handler (`extraction_failed`, post-conversion `too_large`, `save_failed`) now `throw MarkfetchError` from core uniformly; both adapters catch and convert. Same observable error messages.
+
 ## [0.4.1] - 2026-05-11
 
 ### Fixed
