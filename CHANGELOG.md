@@ -7,8 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-05-14
+
+### Added
+- Cross-platform absolute-path validation for `savePath` (MCP). Windows-style paths (`C:\foo`, `C:/foo`, `\\server\share`, `\foo`) are now accepted alongside POSIX absolute paths. The schema delegates to `path.isAbsolute()` so it stays correct on whichever platform the process runs.
+- Write sandbox restricting MCP `savePath` writes. By default the allowed set is `realpath(os.tmpdir())` ∪ `realpath(process.cwd())`. Symlinks are resolved via `fs.realpath` before the containment check, so a planted symlink inside the sandbox cannot be used to escape. Violations return the new `save_forbidden` error code; no file is created. The CLI is intentionally unrestricted (human at the shell is the security boundary; the LLM via MCP is the threat surface).
+- `MARKFETCH_ALLOWED_WRITE_ROOTS` env var: platform-delimiter-separated list of absolute paths (`:` on POSIX, `;` on Windows). When set, **replaces** the default allowed roots entirely. Validated at startup with fail-fast-on-stderr semantics matching existing env-var conventions (`MARKFETCH_TIMEOUT_MS`, `MARKFETCH_MAX_BYTES`, `MARKFETCH_USER_AGENT`).
+- `save_forbidden` error code (8th in the contract): returned when a `savePath` resolves outside the configured allowed write roots.
+- CI test job now runs on `ubuntu-latest`, `macos-latest`, and `windows-latest`. `shell: bash` is set on the `npm test` step so the test-glob expands consistently across runners.
+
 ### Changed
-- Resolved code smell SonarQube findings (S4325 redundant `Document` casts, S6594 `String#match` → `RegExp#exec`) — no behavior change, all 50 tests pass. ([c993938](https://github.com/vasylenko/markfetch/commit/c9939385edfbe95f7f34a24ba8e33e5a74ac07f4))
+- MCP `savePath` schema replaced the literal `startsWith('/')` constraint with `z.string().refine(path.isAbsolute)`. **Breaking change for MCP callers that previously wrote outside `os.tmpdir()` or `process.cwd()`** — they will now receive `save_forbidden` and must either move the target inside the default roots or set `MARKFETCH_ALLOWED_WRITE_ROOTS`. CLI behavior is unchanged (no sandbox there).
+- Resolved code smell SonarQube findings (S4325 redundant `Document` casts, S6594 `String#match` → `RegExp#exec`) — no behavior change, all tests pass. ([c993938](https://github.com/vasylenko/markfetch/commit/c9939385edfbe95f7f34a24ba8e33e5a74ac07f4))
 - Documentation and inline comments cleaned up across README, SPEC, source, and test descriptions. Text-only, no runtime change. ([#2](https://github.com/vasylenko/markfetch/pull/2))
 
 ## [0.5.0] - 2026-05-12

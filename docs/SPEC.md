@@ -29,7 +29,9 @@ Errors throw `MarkfetchError` uniformly from core; adapters catch once. Codes: `
 
 - **Whole document or `too_large`.** No pagination. Partial content lets the agent reason over truncated bodies without knowing they're truncated. `savePath` / `-o` is the escape valve for genuinely large documents.
 
-- **Asymmetric `savePath`.** MCP requires absolute paths (zod `startsWith("/")`); CLI accepts relative and resolves against `process.cwd()`. CLI has a stable cwd the user typed `cd` into; MCP servers run in whatever cwd the client picks.
+- **Asymmetric `savePath`.** MCP requires absolute paths via zod `refine(path.isAbsolute)` — accepts platform-appropriate shapes on POSIX (`/foo`) and Windows (`C:\foo`, `C:/foo`, `\\server\share`, `\foo`). CLI accepts relative and resolves against `process.cwd()`. CLI has a stable cwd the user typed `cd` into; MCP servers run in whatever cwd the client picks.
+
+- **Asymmetric write sandbox.** MCP `savePath` writes are confined to `realpath(os.tmpdir())` ∪ `realpath(process.cwd())` by default; the env var `MARKFETCH_ALLOWED_WRITE_ROOTS` (path-delimiter-separated) replaces the defaults. CLI writes anywhere the human's shell permits — no sandbox check. The asymmetry reflects the threat model: an LLM driving the MCP tool may be steered by content from the page it just fetched; a human typing into a shell is the security boundary. Symlinks are resolved via `fs.realpath` before the containment check, so a planted symlink inside the sandbox cannot escape. Containment compare is case-insensitive on `process.platform === "win32"`. Implementation lives in `src/sandbox.ts` (a leaf module — no imports from siblings — so it's unit-testable without spinning up the MCP server). Known limitation: TOCTOU between `realpath` and `writeFile` is not closed — acceptable for a single-user developer tool.
 
 - **Stderr is fatal-only.** Per-request MCP errors round-trip through `{ isError }`; only startup misconfig / unrecoverable crashes touch stderr. CLI is its own session, so its per-request errors *are* fatal for that session. Regression guard: `tests/server.test.ts:436`.
 
@@ -41,4 +43,3 @@ Errors throw `MarkfetchError` uniformly from core; adapters catch once. Codes: `
 - **Cookie reuse across redirects within a single fetch.** Currently none. Trigger: a target serves content only after a session-cookie redirect.
 - **Proxy support** (`MARKFETCH_PROXY_URL`) and **`Accept-Language` control** (`MARKFETCH_ACCEPT_LANGUAGE`). Trigger: corporate proxy / locale-specific content.
 - **Single-binary distribution.** Bun's `build --compile`, Node SEA, or similar. Trigger: `npx` first-run latency feedback, or an offline / airgapped need.
-- **Windows-friendly `savePath` schema.** Currently Unix-shaped (`startsWith("/")`). Trigger: someone needs this on Windows.
