@@ -14,6 +14,14 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { fetchMarkdown, classifyError, type ErrorCode } from "./core.js";
 import { isAbsolute } from "node:path";
+import { buildAllowedRoots, checkPath } from "./sandbox.js";
+
+// Write-sandbox allowed roots, built once at startup. Failures here (e.g.,
+// MARKFETCH_ALLOWED_WRITE_ROOTS pointing at a non-existent directory) escape
+// module init and surface on stderr — same fail-fast convention as intEnv()
+// in core.ts. No try/catch: a bad write-roots config is a startup error,
+// not a per-request error.
+const ALLOWED_ROOTS = await buildAllowedRoots(process.env);
 
 function errorResult(code: ErrorCode, message: string) {
   return {
@@ -46,6 +54,16 @@ server.registerTool(
     },
   },
   async ({ url, savePath }) => {
+    // Sandbox gate: MCP-only by design. The CLI adapter does not run this
+    // check — the human at the shell is the security boundary there.
+    // Run before fetchMarkdown so a forbidden path short-circuits the
+    // network round-trip entirely.
+    if (savePath !== undefined) {
+      const check = await checkPath(savePath, ALLOWED_ROOTS);
+      if (!check.ok) {
+        return errorResult("save_forbidden", check.reason);
+      }
+    }
     try {
       const { markdown, bytes, savedTo } = await fetchMarkdown({
         url,
