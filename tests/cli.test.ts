@@ -9,15 +9,17 @@ import { promisify } from "node:util";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve as resolvePath } from "node:path";
-import { startMock, HAPPY_FIXTURE } from "./_helpers.js";
+import { startMock, HAPPY_FIXTURE, TSX_LOADER_URL } from "./_helpers.js";
 
 const execFileAsync = promisify(execFile);
 
 // Resolved at module load against the test runner's cwd (the project root).
-// Tests that override `cwd` to a tmpdir still need to find the tsx CLI
-// and the source entry — passing relative paths would resolve against the
-// new cwd and produce a confusing ENOENT instead of the behavior under test.
-const TSX_CLI = resolvePath("./node_modules/.bin/tsx");
+// Tests that override `cwd` to a tmpdir still need to find the source entry
+// — a relative path would resolve against the new cwd and produce a
+// confusing ENOENT instead of the behavior under test. The tsx loader is
+// imported via TSX_LOADER_URL (an absolute file:// URL from _helpers.ts)
+// for the same portability reason; it also bypasses the platform-specific
+// `./node_modules/.bin/tsx[.cmd]` shim entirely.
 const ENTRY = resolvePath("src/index.ts");
 
 type RunResult = { code: number; stdout: string; stderr: string };
@@ -38,8 +40,8 @@ async function runCli(
 ): Promise<RunResult> {
   try {
     const { stdout, stderr } = await execFileAsync(
-      TSX_CLI,
-      [ENTRY, ...args],
+      process.execPath,
+      ["--import", TSX_LOADER_URL, ENTRY, ...args],
       {
         env: { ...process.env, ...env } as Record<string, string>,
         cwd,

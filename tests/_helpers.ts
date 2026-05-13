@@ -10,8 +10,25 @@ import {
   type IncomingMessage,
   type ServerResponse,
 } from "node:http";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+
+// Absolute file:// URL for tsx's loader entry. Test helpers that spawn the
+// CLI via `node --import <url> src/index.ts` use this rather than the
+// `./node_modules/.bin/tsx` shim (a `.cmd` file on Windows that Node's
+// native child_process.spawn cannot launch without `shell: true`). Resolved
+// once at test-startup so it stays correct even when individual tests
+// override the child cwd.
+//
+// spawnClient (below) is intentionally NOT switched to this pattern: it
+// relies on the MCP SDK's StdioClientTransport, which uses its own
+// cross-platform launcher and already handles `command: "tsx"` correctly
+// on Windows. Touching it would couple this code to SDK internals.
+export const TSX_LOADER_URL = pathToFileURL(
+  resolve("./node_modules/tsx/dist/loader.mjs"),
+).href;
 
 export async function startMock(
   handler: (req: IncomingMessage, res: ServerResponse) => void,
@@ -103,10 +120,14 @@ export async function spawnAndCaptureExit(
   args: string[],
   env: Record<string, string>,
 ): Promise<{ exitCode: number; stderr: string }> {
-  const child = spawn("./node_modules/.bin/tsx", args, {
-    env: { ...process.env, ...env } as Record<string, string>,
-    stdio: ["pipe", "pipe", "pipe"],
-  });
+  const child = spawn(
+    process.execPath,
+    ["--import", TSX_LOADER_URL, ...args],
+    {
+      env: { ...process.env, ...env } as Record<string, string>,
+      stdio: ["pipe", "pipe", "pipe"],
+    },
+  );
   let stderr = "";
   child.stderr.on("data", (d: Buffer) => {
     stderr += d.toString();

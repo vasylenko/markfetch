@@ -123,7 +123,7 @@ export async function checkPath(
       if (parent === ancestor) {
         return {
           ok: false,
-          reason: `cannot resolve any extant ancestor for ${JSON.stringify(savePath)}`,
+          reason: `cannot resolve any extant ancestor for '${savePath}'`,
         };
       }
       trailing.unshift(parse(ancestor).base);
@@ -154,6 +154,6 @@ export async function checkPath(
   }
   return {
     ok: false,
-    reason: `${JSON.stringify(reattached)} is outside the allowed write roots: [${roots.map((r) => JSON.stringify(r)).join(", ")}]`,
+    reason: `'${reattached}' is outside the allowed write roots: [${roots.map((r) => `'${r}'`).join(", ")}]`,
   };
 }
