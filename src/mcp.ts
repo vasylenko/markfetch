@@ -13,6 +13,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { fetchMarkdown, classifyError, type ErrorCode } from "./core.js";
+import { isAbsolute } from "node:path";
 
 function errorResult(code: ErrorCode, message: string) {
   return {
@@ -37,10 +38,10 @@ server.registerTool(
         ),
       savePath: z
         .string()
-        .startsWith("/")
+        .refine(isAbsolute, "savePath must be an absolute filesystem path")
         .optional()
         .describe(
-          "Optional. When provided, the fetched markdown is written to this absolute filesystem path and the response becomes a small confirmation. Use this when the markdown might exceed your client's tool-result inline cap. Must be an absolute path starting with '/'; relative paths and tilde-paths ('~/...') are rejected by the schema. Existing files are overwritten; the parent directory must exist (caller's responsibility). The file is written only on fetch success — fetch / extraction / size-cap errors return a [code] string and never touch the file.",
+          "Optional. When provided, the fetched markdown is written to this absolute filesystem path and the response becomes a small confirmation. Use this when the markdown might exceed your client's tool-result inline cap. Must be an absolute path on the host platform (e.g., `/foo/bar.md` on POSIX; `C:\\foo\\bar.md` or `\\\\server\\share\\bar.md` on Windows); relative paths and tilde paths (`~/...`) are rejected by the schema. Existing files are overwritten; the parent directory must exist (caller's responsibility). The file is written only on fetch success — fetch / extraction / size-cap errors return a `[code]` string and never touch the file.",
         ),
     },
   },

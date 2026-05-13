@@ -514,25 +514,31 @@ test("savePath: writeFile rejection surfaces as [save_failed] with errno; file i
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     res.end(HAPPY_FIXTURE);
   });
-  const savePath = "/nonexistent-parent-zzz-savepath-test/out.md";
-  const client = await spawnClient();
-  try {
-    const result = await client.callTool({
-      name: "fetch_markdown",
-      arguments: { url: mock.url, savePath },
-    });
-    assert.equal(result.isError, true);
-    assert.match(textOf(result), /^\[save_failed\]/);
-    assert.match(textOf(result), /ENOENT/);
-    await assert.rejects(
-      access(savePath),
-      /ENOENT/,
-      "file must not have been created on save failure",
-    );
-  } finally {
-    await client.close();
-    await mock.close();
-  }
+  // Path lives inside the default sandbox (os.tmpdir() via mkdtemp), so the
+  // sandbox check passes and writeFile actually runs. The "nonexistent-subdir"
+  // intermediate doesn't exist, so writeFile fails with ENOENT — exercising
+  // the save_failed branch of core.ts.
+  await withTmpDir(async (dir) => {
+    const savePath = join(dir, "nonexistent-subdir", "out.md");
+    const client = await spawnClient();
+    try {
+      const result = await client.callTool({
+        name: "fetch_markdown",
+        arguments: { url: mock.url, savePath },
+      });
+      assert.equal(result.isError, true);
+      assert.match(textOf(result), /^\[save_failed\]/);
+      assert.match(textOf(result), /ENOENT/);
+      await assert.rejects(
+        access(savePath),
+        /ENOENT/,
+        "file must not have been created on save failure",
+      );
+    } finally {
+      await client.close();
+      await mock.close();
+    }
+  });
 });
 
 // T6 — THE Invariant. The file at savePath is only ever the markdown of the URL (per README and SPEC.md).

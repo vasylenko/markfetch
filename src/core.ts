@@ -154,7 +154,8 @@ export type ErrorCode =
   | "unsupported_content_type"
   | "extraction_failed"
   | "too_large"
-  | "save_failed";
+  | "save_failed"
+  | "save_forbidden";
 
 export class MarkfetchError extends Error {
   constructor(
