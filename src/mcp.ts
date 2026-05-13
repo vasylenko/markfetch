@@ -27,7 +27,7 @@ server.registerTool(
   "fetch_markdown",
   {
     description:
-      "Fetch a single public HTTP/S URL and return its main article content as clean markdown. Best for articles, documentation, blog posts, news, and reference pages. JavaScript-rendered SPAs and non-HTML responses return structured errors instead of partial content. Also supports saving the markdown to a file, e.g., to bypass client tool-result size limits or to reuse later.",
+      "Fetch a single public HTTP/S URL and return its main article content as clean markdown. Best for articles, documentation, blog posts, news, and reference pages. Non-HTML responses return `unsupported_content_type`. Pure client-rendered SPAs with no extractable static HTML return `extraction_failed`; SPAs that ship server-rendered or SEO-prerendered HTML will extract whatever static content they expose. Also supports saving the markdown to a file, e.g., to bypass client tool-result size limits or to reuse later.",
     inputSchema: {
       url: z
         .string()

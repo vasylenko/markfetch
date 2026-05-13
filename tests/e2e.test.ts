@@ -1,4 +1,4 @@
-// E2E tests against the COMPILED binary (`node dist/index.js`), not the dev
+// E2E tests against the BUILT JS output (`node dist/index.js`), not the dev
 // source. server.test.ts already exercises the full surface via tsx; this file
 // verifies that `tsc` output is itself correct and runnable. If server.test.ts
 // passes but this file fails, the bug lives in the build pipeline, not the
@@ -21,15 +21,15 @@ import { join, resolve as resolvePath } from "node:path";
 const execFileAsync = promisify(execFile);
 
 // Resolved absolute paths so a test that overrides cwd still locates the
-// built binary. node is on PATH, so a bare command name is fine for it.
-const BUILT_BIN = resolvePath("dist/index.js");
+// built JS entry. node is on PATH, so a bare command name is fine for it.
+const BUILT_JS = resolvePath("dist/index.js");
 
 before(() => {
   // Always rebuild so e2e tests run against current source, not a stale dist/.
   execSync("npm run build", { stdio: "inherit" });
 });
 
-async function spawnCompiled(env: Record<string, string> = {}) {
+async function spawnBuilt(env: Record<string, string> = {}) {
   const transport = new StdioClientTransport({
     command: "node",
     args: ["dist/index.js"],
@@ -74,7 +74,7 @@ const HAPPY_FIXTURE = `<!DOCTYPE html>
   <main>
     <article>
       <h1>E2E Fixture Heading</h1>
-      <p>This is a deterministic fixture for verifying the compiled binary's full pipeline. The article contains enough prose to pass Readability scoring without depending on any external network resource.</p>
+      <p>This is a deterministic fixture for verifying the built output's full pipeline. The article contains enough prose to pass Readability scoring without depending on any external network resource.</p>
       <h2>Sub-section</h2>
       <p>Second paragraph adds more substance so the extracted markdown has multiple structural elements to assert against. Lorem ipsum dolor sit amet.</p>
     </article>
@@ -83,8 +83,8 @@ const HAPPY_FIXTURE = `<!DOCTYPE html>
 </body>
 </html>`;
 
-test("e2e: compiled binary boots, exposes fetch_markdown, pins version", async () => {
-  const client = await spawnCompiled();
+test("e2e: built output boots, exposes fetch_markdown, pins version", async () => {
+  const client = await spawnBuilt();
   try {
     const info = client.getServerVersion();
     assert.equal(info?.name, "markfetch");
@@ -97,12 +97,12 @@ test("e2e: compiled binary boots, exposes fetch_markdown, pins version", async (
   }
 });
 
-test("e2e: compiled binary returns markdown for a mock fixture", async () => {
+test("e2e: built output returns markdown for a mock fixture", async () => {
   const mock = await startMock((_req, res) => {
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     res.end(HAPPY_FIXTURE);
   });
-  const client = await spawnCompiled();
+  const client = await spawnBuilt();
   try {
     const result = await client.callTool({
       name: "fetch_markdown",
@@ -121,8 +121,8 @@ test("e2e: compiled binary returns markdown for a mock fixture", async () => {
   }
 });
 
-test("e2e: compiled binary returns [network_error] for invalid host", async () => {
-  const client = await spawnCompiled();
+test("e2e: built output returns [network_error] for invalid host", async () => {
+  const client = await spawnBuilt();
   try {
     const result = await client.callTool({
       name: "fetch_markdown",
@@ -135,17 +135,17 @@ test("e2e: compiled binary returns [network_error] for invalid host", async () =
   }
 });
 
-// E1 — savePath against the compiled binary. Pins the build pipeline against
+// E1 — savePath against the built JS output. Pins the build pipeline against
 // the new code path. If T1 (server.test) passes but this fails, the bug is
 // in tsc/postbuild, not the runtime logic.
-test("e2e: compiled binary writes markdown to savePath, returns confirmation", async () => {
+test("e2e: built output writes markdown to savePath, returns confirmation", async () => {
   const mock = await startMock((_req, res) => {
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     res.end(HAPPY_FIXTURE);
   });
   const dir = await mkdtemp(join(tmpdir(), "mf-e2e-savepath-"));
   const savePath = join(dir, "out.md");
-  const client = await spawnCompiled();
+  const client = await spawnBuilt();
   try {
     const result = await client.callTool({
       name: "fetch_markdown",
@@ -166,12 +166,12 @@ test("e2e: compiled binary writes markdown to savePath, returns confirmation", a
   }
 });
 
-// CLI-mode e2e tests. These spawn the compiled binary with arguments so the
+// CLI-mode e2e tests. These spawn the built JS output with arguments so the
 // dispatcher in dist/index.js routes to dist/cli.js — exercising the lazy
 // import path that tsc must emit correctly. If the corresponding cli.test
 // passes but these fail, the bug is in the build pipeline, not runtime logic.
 
-test("e2e: compiled binary CLI prints markdown to stdout, exit 0", async () => {
+test("e2e: built output CLI prints markdown to stdout, exit 0", async () => {
   const mock = await startMock((_req, res) => {
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     res.end(HAPPY_FIXTURE);
@@ -179,7 +179,7 @@ test("e2e: compiled binary CLI prints markdown to stdout, exit 0", async () => {
   try {
     const { stdout, stderr } = await execFileAsync(
       "node",
-      [BUILT_BIN, mock.url],
+      [BUILT_JS, mock.url],
       { timeout: 10_000, maxBuffer: 5_000_000 },
     );
     assert.equal(stderr, "", "stderr must stay empty on happy path");
@@ -189,10 +189,10 @@ test("e2e: compiled binary CLI prints markdown to stdout, exit 0", async () => {
   }
 });
 
-test("e2e: compiled binary --version prints package version, exit 0", async () => {
+test("e2e: built output --version prints package version, exit 0", async () => {
   const { stdout, stderr } = await execFileAsync(
     "node",
-    [BUILT_BIN, "--version"],
+    [BUILT_JS, "--version"],
     { timeout: 10_000 },
   );
   assert.equal(stderr, "");

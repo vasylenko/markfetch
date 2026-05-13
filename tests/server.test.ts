@@ -433,7 +433,7 @@ test("Sec-CH-UA-* client hints are derived from MARKFETCH_USER_AGENT", async () 
   }
 });
 
-test("per-request errors do not leak to stderr (Principle #4: stderr is fatal-only)", async () => {
+test("per-request errors do not leak to stderr (stderr-is-fatal-only invariant per SPEC.md)", async () => {
   // Connect with stderr: "pipe" so we observe the server's stderr directly
   // while it handles a per-request failure. A network_error from an
   // unresolvable host is the cheapest reliable per-request failure.
@@ -667,7 +667,7 @@ test("savePath: writeFile rejection surfaces as [save_failed] with errno; file i
   }
 });
 
-// T6 — THE Invariant. PRD §5: file at savePath is only ever the markdown.
+// T6 — THE Invariant. The file at savePath is only ever the markdown of the URL (per README and SPEC.md).
 test("savePath INVARIANT: fetch error + savePath → file is NOT written", async () => {
   const mock = await startMock((_req, res) => {
     res.writeHead(404, { "Content-Type": "text/html" });

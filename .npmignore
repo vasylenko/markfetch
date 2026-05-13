@@ -1,4 +1,4 @@
-# Source files (compiled to dist/, which is in `files`)
+# Source, tests, and TS build config (not needed at runtime; dist/ ships instead)
 src/
 tests/
 *.ts
@@ -12,7 +12,7 @@ tsconfig.json
 docs/
 scripts/
 
-# Project files (rendered into the GitHub release body, not the npm package)
+# Repo-only docs (CHANGELOG.md is rendered into the GitHub release body; CLAUDE.md is agent instructions). Excluded from the npm tarball.
 CHANGELOG.md
 CLAUDE.md
 

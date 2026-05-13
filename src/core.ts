@@ -42,10 +42,10 @@ const config = {
   userAgent: process.env.MARKFETCH_USER_AGENT || DEFAULT_USER_AGENT,
 };
 
-// Derive Sec-CH-UA-* client hints from the User-Agent. PRD §4 calls out that a
-// Chrome UA paired with mismatched (or absent) client hints is a stronger bot
-// signal than a curl UA — the two MUST agree. Deriving from a single source
-// makes that invariant mechanical: override the UA, the hints follow.
+// Derive Sec-CH-UA-* client hints from the User-Agent. A Chrome UA paired
+// with mismatched (or absent) client hints is a stronger bot signal than a
+// curl UA — the two MUST agree. Deriving from a single source makes that
+// invariant mechanical: override the UA, the hints follow.
 function deriveClientHints(ua: string): {
   brands: string;
   mobile: string;
@@ -58,8 +58,12 @@ function deriveClientHints(ua: string): {
     );
   }
   const major = versionMatch[1];
-  // The "Not?A_Brand" decoy rotates per Chrome major (130 ships v="99"). Servers
-  // don't fingerprint the decoy version, so pinning v="99" is acceptable.
+  // Chrome's GREASE rotation changes BOTH the decoy brand token AND its
+  // version per major: Chrome 130 ships "Not?A_Brand";v="99", Chrome 131
+  // ships "Not_A Brand";v="24". We hard-code the Chrome-130 values; if a
+  // caller overrides MARKFETCH_USER_AGENT to a different Chrome major, the
+  // decoy shape will be stale. That is acceptable because bot detectors
+  // don't fingerprint the decoy itself — only the real brand pair.
   const brands = `"Chromium";v="${major}", "Google Chrome";v="${major}", "Not?A_Brand";v="99"`;
   // Chrome's mobile UAs include a literal " Mobile " token; tablets/desktop omit it.
   const mobile = /\bMobile\b/.test(ua) ? "?1" : "?0";
@@ -83,11 +87,11 @@ function deriveClientHints(ua: string): {
 const clientHints = deriveClientHints(config.userAgent);
 
 // Enable HTTP/2 via TLS ALPN. Modern bot-detection systems and CDNs consider
-// wire protocol alongside header fingerprint; HTTP/2 paired with a Chrome
-// header set is internally consistent, HTTP/1.1 + Chrome headers is not.
-// Servers that don't advertise h2 in ALPN fall back to HTTP/1.1 transparently
-// during the TLS handshake — no manual retry needed. Plain-HTTP connections
-// (port 80) skip ALPN entirely and use HTTP/1.1.
+// wire protocol alongside header fingerprint; HTTP/2 over TLS pairs cleanly
+// with a Chrome header set. Servers that don't advertise h2 in ALPN fall back
+// to HTTP/1.1 transparently during the TLS handshake — no manual retry needed.
+// Plain-HTTP connections (port 80) skip ALPN entirely and use HTTP/1.1,
+// accepting the protocol/fingerprint mismatch in that case.
 setGlobalDispatcher(new Agent({ allowH2: true }));
 
 const TURNDOWN = new TurndownService({
@@ -111,9 +115,10 @@ TURNDOWN.use(gfm);
 //     the start of each text node, not start-of-line. After inline
 //     elements, the next text node often begins with `-suffix` / `=value`,
 //     and gets escaped even though it sits mid-line in the rendered
-//     markdown. CommonMark requires `- ` (dash + space) for an unordered
-//     list and `===` alone for a setext underline, so `\-X` / `\=X` where
-//     X is alphanumeric is never structurally meaningful.
+//     markdown. CommonMark setext underlines are `=` or `-` characters on
+//     a line by themselves; unordered-list markers require `-`/`+`/`*`
+//     followed by whitespace or end-of-line. `\-X` / `\=X` where X is
+//     alphanumeric cannot match either rule, so the escape is pure noise.
 //
 // Drop both. The negative lookbehind `(?<!\\)` on the second replace
 // protects literal-backslash content: source HTML containing `\-X`
@@ -165,7 +170,8 @@ export function classifyError(err: unknown): { code: ErrorCode; message: string 
   if (err instanceof MarkfetchError) {
     return { code: err.code, message: err.message };
   }
-  // AbortSignal.timeout produces DOMException with name "TimeoutError".
+  // AbortSignal.timeout normally produces a DOMException named "TimeoutError";
+  // some undici code paths surface AbortError instead, so accept both.
   if (
     err instanceof Error &&
     (err.name === "TimeoutError" || err.name === "AbortError")
@@ -210,6 +216,9 @@ function chromeHeaders(): Record<string, string> {
     "Sec-Fetch-Dest": "document",
     "Sec-Fetch-Mode": "navigate",
     "Sec-Fetch-Site": "none",
+    // Always-on. Real browsers omit this header when there's no user
+    // activation; we model a "user clicked a link" navigation, consistent
+    // with `Sec-Fetch-Site: "none"` above.
     "Sec-Fetch-User": "?1",
     "Sec-CH-UA": clientHints.brands,
     "Sec-CH-UA-Mobile": clientHints.mobile,
@@ -267,9 +276,9 @@ function enforceTooLarge(stage: string, actual: number): MarkfetchError {
 // rather than real `<code>` elements. Decode those specific tag patterns so
 // turndown processes them as real elements and converts to backticks.
 // Pattern accepts `<code>`, `<code class="...">`, `</code>`, `<pre>` etc., but
-// rejects `<codename>`, `<preview>`, `<codeblock>` — the trailing requirement
-// is whitespace, "/", or end-of-tag, so element names with extra characters
-// after `code`/`pre` are not matched.
+// rejects `<codename>`, `<preview>`, `<codeblock>` — the next char after
+// `code`/`pre` must be whitespace, `/`, or `&` (the start of `&gt;`), so
+// element names with extra characters are not matched.
 function decodeEncodedCodeTags(html: string): string {
   return html.replaceAll(
     /&lt;(\/?(?:code|pre)(?:\s[^&]*?)?\/?)&gt;/g,
@@ -389,7 +398,7 @@ function convertToMarkdown(article: {
 //
 // Errors are thrown uniformly as MarkfetchError. Adapters catch and translate:
 //   - mcp.ts catches → errorResult(code, message) → MCP {isError, content}
-//   - cli.ts catches → console.error("[code] message") → exit code 1
+//   - cli.ts catches → console.error("[code] message") → sets process.exitCode = 1
 //
 // The full set of error codes this can throw:
 //   network_error, http_error, timeout, unsupported_content_type,

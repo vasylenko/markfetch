@@ -1,6 +1,6 @@
 # markfetch
 
-**Reader View for AI agents and your shell. Fetch any URL, get back clean markdown — at a real Chrome's request rate, not curl's.**
+**Reader View for AI agents and your shell. Fetch any URL, get back clean markdown — with a real Chrome's request fingerprint, not curl's.**
 
 [![npm](https://img.shields.io/npm/v/markfetch.svg?color=10b981&label=npm)](https://www.npmjs.com/package/markfetch)
 [![ci](https://github.com/vasylenko/markfetch/actions/workflows/ci.yml/badge.svg)](https://github.com/vasylenko/markfetch/actions/workflows/ci.yml)
@@ -32,7 +32,7 @@ markfetch https://en.wikipedia.org/wiki/Markdown
 }
 ```
 
-That snippet is the whole MCP setup — or jump to [CLI usage](#cli-usage) to drive the same binary from a shell.
+That snippet is the whole MCP setup — or jump to [CLI usage](#cli-usage) to drive the same command from a shell.
 
 ## MCP install commands
 
@@ -65,15 +65,15 @@ gemini mcp add -s user markfetch npx -y markfetch
 
 - **Reader-View-quality extraction.** [linkedom](https://github.com/WebReflection/linkedom) → [@mozilla/readability](https://github.com/mozilla/readability) → [turndown](https://github.com/mixmark-io/turndown) with GFM tables, strikethrough, and task lists. Code fences preserve `language-X` hints. Sphinx-style bare `<pre>` blocks render as code, not escaped prose. Intraword underscores stay un-escaped — no more `list\_tools`.
 
-- **One tool, one shape (MCP).** `fetch_markdown(url, savePath?)` returns markdown in `content[0].text`. No `structuredContent`, no frontmatter, no metadata fields. Modern MCP clients hide `content[]` when `structuredContent` is present — `markfetch` deliberately stays on the channel your LLM can actually read.
+- **One tool, one shape (MCP).** `fetch_markdown(url, savePath?)` returns markdown in `content[0].text`. No `structuredContent`, no frontmatter, no metadata fields. Several major MCP clients (Claude Code CLI, VS Code/Copilot) forward only `structuredContent` to the model and drop `content[]` when both are present — `markfetch` deliberately stays on the channel your LLM can actually read.
 
 - **`savePath` / `-o` escape valve.** Pass an absolute path (MCP `savePath`) or `-o <path>` (CLI) and the markdown lands on disk instead of the response channel. Use it when your client's inline tool-result cap would truncate large responses, or to redirect output from a shell pipeline. The file is only ever the markdown of the URL — fetch errors return a `[code]` string and never touch the disk.
 
 - **Whole document or honest failure.** No pagination, no truncation. If the document doesn't fit in `MARKFETCH_MAX_BYTES`, you get `too_large` — never a half-truth.
 
-- **Stdio-clean.** Stdout is reserved for MCP frames. Stderr is fatal-only. No log spam, no ANSI escapes that could corrupt protocol framing.
+- **Stdio-clean.** Stdout is reserved for MCP frames. Stderr is fatal-only. No log spam, no ANSI escapes — keeping stderr parseable for shell consumers.
 
-- **Pure Node, no subprocesses.** No Playwright, no headless Chromium, no Python hop. Single TypeScript executable on Node 24+ — one process whether you invoke it as an MCP server or from the shell.
+- **Pure Node, no subprocesses.** No Playwright, no headless Chromium, no Python hop. Single Node process — one Node process whether you invoke it as an MCP server or from the shell.
 
 ## CLI usage
 
@@ -112,7 +112,7 @@ Errors go to stderr with the same `[code] message` shape the MCP tool returns (s
 
 - **Not a crawler.** No recursion, no `robots.txt` parsing, no rate-limit orchestration. One URL in, one document out.
 - **Not authenticated.** Anonymous fetch only — no cookie jar, no auth headers, no session reuse. Pages behind login walls return whatever the public response is, usually surfaced as `http_error`.
-- **Not a JS renderer.** Single-page apps that paint their content client-side return `extraction_failed`. Use this on server-rendered pages.
+- **Not a JS renderer.** Pure client-rendered SPAs with no static content return `extraction_failed`. SPAs with server-rendered or SEO-prerendered HTML will extract whatever static content they ship.
 
 ## Configuration
 
@@ -142,7 +142,7 @@ Pass overrides via the `env` block of your MCP client config:
 
 Requires Node.js ≥ 24.
 
-When iterating on CLI changes, `tsx src/index.ts <url>` and `tsx src/index.ts --help` route through the same argv-discriminated dispatcher as the compiled binary — no rebuild needed between edits.
+When iterating on CLI changes, `tsx src/index.ts <url>` and `tsx src/index.ts --help` route through the same argv-discriminated dispatcher as the built `dist/index.js` — no rebuild needed between edits.
 
 To point an MCP client at a local source build, swap `npx` for `node` + an absolute path to `dist/index.js`:
 
