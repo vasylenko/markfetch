@@ -6,14 +6,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import {
-  createServer,
-  type IncomingMessage,
-  type ServerResponse,
-} from "node:http";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve as resolvePath } from "node:path";
+import { startMock, HAPPY_FIXTURE } from "./_helpers.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -23,44 +19,6 @@ const execFileAsync = promisify(execFile);
 // new cwd and produce a confusing ENOENT instead of the behavior under test.
 const TSX_CLI = resolvePath("./node_modules/.bin/tsx");
 const ENTRY = resolvePath("src/index.ts");
-
-const HAPPY_FIXTURE = `<!DOCTYPE html>
-<html lang="en">
-<head><title>Test Article</title></head>
-<body>
-  <header><nav>nav links</nav></header>
-  <main>
-    <article>
-      <h1>Test Article Title</h1>
-      <p>First substantive paragraph with enough content to pass Readability's heuristics. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. The article contains real prose for the extractor to score positively.</p>
-      <h2>Section heading</h2>
-      <p>Second paragraph with continuing content. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. More words to give Readability adequate signal.</p>
-    </article>
-  </main>
-  <footer>copyright</footer>
-</body>
-</html>`;
-
-async function startMock(
-  handler: (req: IncomingMessage, res: ServerResponse) => void,
-): Promise<{ url: string; close: () => Promise<void> }> {
-  const httpServer = createServer(handler);
-  await new Promise<void>((resolve) =>
-    httpServer.listen(0, "127.0.0.1", () => resolve()),
-  );
-  const address = httpServer.address();
-  if (!address || typeof address !== "object") {
-    throw new Error("mock server address unavailable");
-  }
-  return {
-    url: `http://127.0.0.1:${address.port}`,
-    close: () =>
-      new Promise<void>((resolve, reject) => {
-        httpServer.closeAllConnections();
-        httpServer.close((err) => (err ? reject(err) : resolve()));
-      }),
-  };
-}
 
 type RunResult = { code: number; stdout: string; stderr: string };
 
