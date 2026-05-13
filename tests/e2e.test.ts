@@ -58,7 +58,7 @@ test("e2e: built output boots, exposes fetch_markdown, pins version", async () =
   try {
     const info = client.getServerVersion();
     assert.equal(info?.name, "markfetch");
-    assert.equal(info?.version, "0.5.0");
+    assert.equal(info?.version, "0.6.0");
     const { tools } = await client.listTools();
     assert.equal(tools.length, 1);
     assert.equal(tools[0].name, "fetch_markdown");
@@ -166,5 +166,5 @@ test("e2e: built output --version prints package version, exit 0", async () => {
     { timeout: 10_000 },
   );
   assert.equal(stderr, "");
-  assert.equal(stdout, "0.5.0\n");
+  assert.equal(stdout, "0.6.0\n");
 });

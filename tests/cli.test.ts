@@ -196,7 +196,7 @@ test("CLI: --version prints version to stdout, exit 0", async () => {
   const { code, stdout, stderr } = await runCli(["--version"]);
   assert.equal(code, 0);
   assert.equal(stderr, "");
-  assert.equal(stdout, "0.5.0\n");
+  assert.equal(stdout, "0.6.0\n");
 });
 
 // This test documents a deliberate asymmetry vs MCP: a malformed URL is NOT

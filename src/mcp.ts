@@ -30,7 +30,7 @@ function errorResult(code: ErrorCode, message: string) {
   };
 }
 
-const server = new McpServer({ name: "markfetch", version: "0.5.0" });
+const server = new McpServer({ name: "markfetch", version: "0.6.0" });
 
 server.registerTool(
   "fetch_markdown",
