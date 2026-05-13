@@ -1,11 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import {
-  createServer,
-  type IncomingMessage,
-  type ServerResponse,
-} from "node:http";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import {
@@ -18,63 +12,14 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
-async function spawnClient(env: Record<string, string> = {}) {
-  const transport = new StdioClientTransport({
-    command: "tsx",
-    args: ["src/index.ts"],
-    env: { ...process.env, ...env } as Record<string, string>,
-  });
-  const client = new Client({ name: "markfetch-test", version: "0.0.0" });
-  await client.connect(transport);
-  return client;
-}
-
-function textOf(result: { content: unknown }): string {
-  const content = result.content as Array<{ type: string; text?: string }>;
-  return content[0]?.text ?? "";
-}
-
-async function startMock(
-  handler: (req: IncomingMessage, res: ServerResponse) => void,
-): Promise<{ url: string; close: () => Promise<void> }> {
-  const httpServer = createServer(handler);
-  await new Promise<void>((resolve) =>
-    httpServer.listen(0, "127.0.0.1", () => resolve()),
-  );
-  const address = httpServer.address();
-  if (!address || typeof address !== "object") {
-    throw new Error("mock server address unavailable");
-  }
-  return {
-    url: `http://127.0.0.1:${address.port}`,
-    close: () =>
-      new Promise<void>((resolve, reject) => {
-        httpServer.closeAllConnections();
-        httpServer.close((err) => (err ? reject(err) : resolve()));
-      }),
-  };
-}
-
-// Deterministic fixture: a small but Readability-friendly article.
-const HAPPY_FIXTURE = `<!DOCTYPE html>
-<html lang="en">
-<head><title>Test Article</title></head>
-<body>
-  <header><nav>nav links</nav></header>
-  <main>
-    <article>
-      <h1>Test Article Title</h1>
-      <p>First substantive paragraph with enough content to pass Readability's heuristics. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. The article contains real prose for the extractor to score positively.</p>
-      <h2>Section heading</h2>
-      <p>Second paragraph with continuing content. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. More words to give Readability adequate signal.</p>
-      <h2>Another section</h2>
-      <p>Third paragraph: Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
-    </article>
-  </main>
-  <footer>copyright</footer>
-</body>
-</html>`;
+import {
+  startMock,
+  textOf,
+  HAPPY_FIXTURE,
+  spawnClient,
+  assertSchemaRejection,
+  spawnAndCaptureExit,
+} from "./_helpers.js";
 
 test("server boots over stdio and completes the initialize handshake", async () => {
   const client = await spawnClient();
@@ -132,36 +77,16 @@ test("happy path: deterministic fixture → pure markdown body in content[0]", a
   }
 });
 
+// F27 regression-guard: locks against Zod being silently removed and
+// "not-a-url" reaching fetch().
 test("zod syntax: malformed URL is rejected at the schema boundary, not by the handler", async () => {
   const client = await spawnClient();
   try {
-    let caught = false;
-    let result:
-      | { isError?: boolean; content?: unknown }
-      | undefined;
-    try {
-      result = (await client.callTool({
-        name: "fetch_markdown",
-        arguments: { url: "not-a-url" },
-      })) as { isError?: boolean; content?: unknown };
-    } catch {
-      caught = true;
-    }
-    // F27 regression-guard: locks against the case where Zod is silently
-    // removed and "not-a-url" reaches fetch(). The SDK either throws (some
-    // versions) OR returns isError:true with schema-error text. Either is
-    // fine — but the text must NOT carry one of our [code] prefixes, which
-    // would prove the handler ran and returned a tool error.
-    if (!caught) {
-      assert.equal(result?.isError, true, "schema rejection must surface as isError");
-      const text = textOf(result as { content: unknown });
-      assert.ok(
-        !/^\[(network_error|http_error|timeout|unsupported_content_type|extraction_failed|too_large|save_failed)\]/.test(
-          text,
-        ),
-        `expected schema error, got tool [code] error (handler ran when it shouldn't have): ${text}`,
-      );
-    }
+    await assertSchemaRejection(
+      client,
+      { url: "not-a-url" },
+      "expected schema error, got tool [code] error (handler ran when it shouldn't have)",
+    );
   } finally {
     await client.close();
   }
@@ -203,7 +128,7 @@ test("error: http_error on 404 response", async () => {
 
 test("error: timeout when server hangs and MARKFETCH_TIMEOUT_MS is small", async () => {
   const mock = await startMock(() => {});
-  const client = await spawnClient({ MARKFETCH_TIMEOUT_MS: "200" });
+  const client = await spawnClient({ env: { MARKFETCH_TIMEOUT_MS: "200" } });
   try {
     const result = await client.callTool({
       name: "fetch_markdown",
@@ -304,7 +229,7 @@ test("error: too_large via Content-Length pre-check", async () => {
     });
     res.end(big);
   });
-  const client = await spawnClient({ MARKFETCH_MAX_BYTES: "100" });
+  const client = await spawnClient({ env: { MARKFETCH_MAX_BYTES: "100" } });
   try {
     const result = await client.callTool({
       name: "fetch_markdown",
@@ -329,7 +254,7 @@ test("error: too_large via post-decode body-bytes check (chunked, no Content-Len
     res.write(big);
     res.end();
   });
-  const client = await spawnClient({ MARKFETCH_MAX_BYTES: "100" });
+  const client = await spawnClient({ env: { MARKFETCH_MAX_BYTES: "100" } });
   try {
     const result = await client.callTool({
       name: "fetch_markdown",
@@ -345,16 +270,8 @@ test("error: too_large via post-decode body-bytes check (chunked, no Content-Len
 });
 
 test("env-var validation: invalid MARKFETCH_TIMEOUT_MS fails fast at startup", async () => {
-  const child = spawn("./node_modules/.bin/tsx", ["src/index.ts"], {
-    env: { ...process.env, MARKFETCH_TIMEOUT_MS: "abc" },
-    stdio: ["pipe", "pipe", "pipe"],
-  });
-  let stderr = "";
-  child.stderr.on("data", (d: Buffer) => {
-    stderr += d.toString();
-  });
-  const exitCode = await new Promise<number>((resolve) => {
-    child.on("exit", (code) => resolve(code ?? -1));
+  const { exitCode, stderr } = await spawnAndCaptureExit(["src/index.ts"], {
+    MARKFETCH_TIMEOUT_MS: "abc",
   });
   assert.notEqual(exitCode, 0, "subprocess must exit non-zero on bad env var");
   assert.match(stderr, /MARKFETCH_TIMEOUT_MS/);
@@ -362,35 +279,16 @@ test("env-var validation: invalid MARKFETCH_TIMEOUT_MS fails fast at startup", a
 });
 
 test("env-var validation: negative MARKFETCH_MAX_BYTES is rejected", async () => {
-  const child = spawn("./node_modules/.bin/tsx", ["src/index.ts"], {
-    env: { ...process.env, MARKFETCH_MAX_BYTES: "-1" },
-    stdio: ["pipe", "pipe", "pipe"],
-  });
-  let stderr = "";
-  child.stderr.on("data", (d: Buffer) => {
-    stderr += d.toString();
-  });
-  const exitCode = await new Promise<number>((resolve) => {
-    child.on("exit", (code) => resolve(code ?? -1));
+  const { exitCode, stderr } = await spawnAndCaptureExit(["src/index.ts"], {
+    MARKFETCH_MAX_BYTES: "-1",
   });
   assert.notEqual(exitCode, 0);
   assert.match(stderr, /MARKFETCH_MAX_BYTES/);
 });
 
 test("env-var validation: non-Chrome MARKFETCH_USER_AGENT fails fast at startup", async () => {
-  const child = spawn("./node_modules/.bin/tsx", ["src/index.ts"], {
-    env: {
-      ...process.env,
-      MARKFETCH_USER_AGENT: "Mozilla/5.0 (X11; FreeBSD) Firefox/120.0",
-    },
-    stdio: ["pipe", "pipe", "pipe"],
-  });
-  let stderr = "";
-  child.stderr.on("data", (d: Buffer) => {
-    stderr += d.toString();
-  });
-  const exitCode = await new Promise<number>((resolve) => {
-    child.on("exit", (code) => resolve(code ?? -1));
+  const { exitCode, stderr } = await spawnAndCaptureExit(["src/index.ts"], {
+    MARKFETCH_USER_AGENT: "Mozilla/5.0 (X11; FreeBSD) Firefox/120.0",
   });
   assert.notEqual(
     exitCode,
@@ -414,7 +312,7 @@ test("Sec-CH-UA-* client hints are derived from MARKFETCH_USER_AGENT", async () 
   });
   const overrideUa =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
-  const client = await spawnClient({ MARKFETCH_USER_AGENT: overrideUa });
+  const client = await spawnClient({ env: { MARKFETCH_USER_AGENT: overrideUa } });
   try {
     const result = await client.callTool({
       name: "fetch_markdown",
@@ -580,26 +478,11 @@ test("savePath: relative path is rejected at the schema boundary, not by the han
   });
   const client = await spawnClient();
   try {
-    let caught = false;
-    let result: { isError?: boolean; content?: unknown } | undefined;
-    try {
-      result = (await client.callTool({
-        name: "fetch_markdown",
-        arguments: { url: mock.url, savePath: "relative/path.md" },
-      })) as { isError?: boolean; content?: unknown };
-    } catch {
-      caught = true;
-    }
-    if (!caught) {
-      assert.equal(result?.isError, true, "schema rejection must surface as isError");
-      const text = textOf(result as { content: unknown });
-      assert.ok(
-        !/^\[(network_error|http_error|timeout|unsupported_content_type|extraction_failed|too_large|save_failed)\]/.test(
-          text,
-        ),
-        `expected schema error, got tool [code] error (handler ran when it shouldn't have): ${text}`,
-      );
-    }
+    await assertSchemaRejection(
+      client,
+      { url: mock.url, savePath: "relative/path.md" },
+      "expected schema error, got tool [code] error (handler ran when it shouldn't have)",
+    );
   } finally {
     await client.close();
     await mock.close();
@@ -614,26 +497,11 @@ test("savePath: tilde-path '~/x.md' is rejected at the schema boundary (no auto-
   });
   const client = await spawnClient();
   try {
-    let caught = false;
-    let result: { isError?: boolean; content?: unknown } | undefined;
-    try {
-      result = (await client.callTool({
-        name: "fetch_markdown",
-        arguments: { url: mock.url, savePath: "~/x.md" },
-      })) as { isError?: boolean; content?: unknown };
-    } catch {
-      caught = true;
-    }
-    if (!caught) {
-      assert.equal(result?.isError, true);
-      const text = textOf(result as { content: unknown });
-      assert.ok(
-        !/^\[(network_error|http_error|timeout|unsupported_content_type|extraction_failed|too_large|save_failed)\]/.test(
-          text,
-        ),
-        `tilde path must be rejected at schema, not by handler: ${text}`,
-      );
-    }
+    await assertSchemaRejection(
+      client,
+      { url: mock.url, savePath: "~/x.md" },
+      "tilde path must be rejected at schema, not by handler",
+    );
   } finally {
     await client.close();
     await mock.close();
@@ -707,7 +575,7 @@ test("savePath INVARIANT: too_large + savePath → file is NOT written (cap runs
   });
   await withTmpDir(async (dir) => {
     const savePath = join(dir, "should-not-exist.md");
-    const client = await spawnClient({ MARKFETCH_MAX_BYTES: "100" });
+    const client = await spawnClient({ env: { MARKFETCH_MAX_BYTES: "100" } });
     try {
       const result = await client.callTool({
         name: "fetch_markdown",

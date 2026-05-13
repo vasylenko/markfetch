@@ -7,16 +7,12 @@ import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { execFile, execSync } from "node:child_process";
 import { promisify } from "node:util";
-import {
-  createServer,
-  type IncomingMessage,
-  type ServerResponse,
-} from "node:http";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve as resolvePath } from "node:path";
+import { startMock, textOf } from "./_helpers.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -38,32 +34,6 @@ async function spawnBuilt(env: Record<string, string> = {}) {
   const client = new Client({ name: "markfetch-e2e", version: "0.0.0" });
   await client.connect(transport);
   return client;
-}
-
-function textOf(result: { content: unknown }): string {
-  const content = result.content as Array<{ type: string; text?: string }>;
-  return content[0]?.text ?? "";
-}
-
-async function startMock(
-  handler: (req: IncomingMessage, res: ServerResponse) => void,
-): Promise<{ url: string; close: () => Promise<void> }> {
-  const httpServer = createServer(handler);
-  await new Promise<void>((resolve) =>
-    httpServer.listen(0, "127.0.0.1", () => resolve()),
-  );
-  const address = httpServer.address();
-  if (!address || typeof address !== "object") {
-    throw new Error("mock server address unavailable");
-  }
-  return {
-    url: `http://127.0.0.1:${address.port}`,
-    close: () =>
-      new Promise<void>((resolve, reject) => {
-        httpServer.closeAllConnections();
-        httpServer.close((err) => (err ? reject(err) : resolve()));
-      }),
-  };
 }
 
 const HAPPY_FIXTURE = `<!DOCTYPE html>

@@ -1,15 +1,9 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import {
-  createServer,
-  type IncomingMessage,
-  type ServerResponse,
-} from "node:http";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { spawnClient, startMock } from "./_helpers.js";
 
 const FIXTURES_DIR = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -22,49 +16,18 @@ const FIXTURES_DIR = join(
 // to detect drift on subsequent edits.
 const UPDATE_MODE = process.env.UPDATE_SNAPSHOTS === "1";
 
-type Mock = {
-  url: string;
-  setHtml: (html: string) => void;
-  close: () => Promise<void>;
-};
-
-let mock: Mock;
-let client: Client;
+// Mutated per test to control what the shared mock server responds with;
+// captured by the startMock handler's closure below.
+let currentHtml = "";
+let mock: Awaited<ReturnType<typeof startMock>>;
+let client: Awaited<ReturnType<typeof spawnClient>>;
 
 before(async () => {
-  let currentHtml = "";
-  const httpServer = createServer(
-    (_req: IncomingMessage, res: ServerResponse) => {
-      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      res.end(currentHtml);
-    },
-  );
-  await new Promise<void>((resolve) =>
-    httpServer.listen(0, "127.0.0.1", () => resolve()),
-  );
-  const address = httpServer.address();
-  if (!address || typeof address !== "object") {
-    throw new Error("mock server address unavailable");
-  }
-  mock = {
-    url: `http://127.0.0.1:${address.port}`,
-    setHtml: (html) => {
-      currentHtml = html;
-    },
-    close: () =>
-      new Promise<void>((resolve, reject) => {
-        httpServer.closeAllConnections();
-        httpServer.close((err) => (err ? reject(err) : resolve()));
-      }),
-  };
-
-  const transport = new StdioClientTransport({
-    command: "tsx",
-    args: ["src/index.ts"],
-    env: process.env as Record<string, string>,
+  mock = await startMock((_req, res) => {
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    res.end(currentHtml);
   });
-  client = new Client({ name: "snapshot-test", version: "0.0.0" });
-  await client.connect(transport);
+  client = await spawnClient({ name: "snapshot-test" });
 });
 
 after(async () => {
@@ -80,7 +43,7 @@ const fixtureNames = (await readdir(FIXTURES_DIR))
 for (const name of fixtureNames) {
   test(`snapshot: ${name}`, async () => {
     const html = await readFile(join(FIXTURES_DIR, `${name}.html`), "utf8");
-    mock.setHtml(html);
+    currentHtml = html;
 
     const result = await client.callTool({
       name: "fetch_markdown",
