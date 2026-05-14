@@ -169,11 +169,8 @@ test("e2e: built output --version prints package version, exit 0", async () => {
   assert.equal(stdout, "0.6.0\n");
 });
 
-// Live E2E against real production URLs. Exercises the full pipeline
-// (HTTP/2 + Chrome fingerprint + linkedom + Readability + turndown)
-// end-to-end. Assertions are property-based (title presence, section
-// counts, chrome stripped) — they do not match exact upstream strings,
-// because the target pages will rewrite their copy over time.
+// Live E2E. Exercises the full pipeline against real production URLs.
+// Property-based assertions only — pages rewrite copy over time.
 
 test("e2e live: en.wikipedia.org/wiki/Markup_language extracts title, sections, and strips chrome", async () => {
   const { stdout, stderr } = await execFileAsync(
