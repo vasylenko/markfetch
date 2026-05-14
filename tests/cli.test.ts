@@ -178,8 +178,9 @@ test("CLI: timeout when MARKFETCH_TIMEOUT_MS is small and server hangs", async (
     assert.notEqual(code, 0);
     assert.equal(stdout, "");
     assert.match(stderr, /^\[timeout\]/);
-    // 1500ms allows for tsx cold-start; the timeout itself fires at 200ms.
-    assert.ok(elapsed < 1500, `timeout should fire fast; took ${elapsed}ms`);
+    // 3000ms is generous headroom for node + tsx ESM-loader cold-start
+    // (especially slow Windows runners); the timeout itself fires at 200ms.
+    assert.ok(elapsed < 3000, `timeout should fire fast; took ${elapsed}ms`);
   } finally {
     await mock.close();
   }
