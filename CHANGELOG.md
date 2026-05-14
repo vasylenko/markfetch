@@ -21,6 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Resolved code smell SonarQube findings (S4325 redundant `Document` casts, S6594 `String#match` → `RegExp#exec`) — no behavior change, all tests pass. ([c993938](https://github.com/vasylenko/markfetch/commit/c9939385edfbe95f7f34a24ba8e33e5a74ac07f4))
 - Documentation and inline comments cleaned up across README, SPEC, source, and test descriptions. Text-only, no runtime change. ([#2](https://github.com/vasylenko/markfetch/pull/2))
 
+### Fixed
+- MCP write sandbox no longer permits a `link/..` escape. The containment check resolved symlinks correctly, but the original caller-supplied `savePath` was passed through to the write, so a path like `<sandbox>/link/../out.md` collapsed lexically for the check yet resolved left-to-right through the symlink at write time and landed outside the sandbox. The canonicalized path now flows from the check into `writeFile`, so the file is created exactly at the validated location. The user-visible confirmation still echoes the original `savePath` to keep messages stable on hosts where tmpdir is itself a symlink (e.g., macOS `/var` → `/private/var`). ([22d7b01](https://github.com/vasylenko/markfetch/commit/22d7b01))
+
 ## [0.5.0] - 2026-05-12
 
 ### Added
