@@ -155,7 +155,7 @@ Pass overrides via the `env` block of your MCP client config:
 
 MCP `savePath` writes are confined to a set of allowed root directories. By default the allowed set is `os.tmpdir()` ∪ `process.cwd()` (each resolved via `fs.realpath` once at startup). A `savePath` outside that set returns `save_forbidden` and no file is created.
 
-Override the default set with `MARKFETCH_ALLOWED_WRITE_ROOTS` — a list of absolute paths separated by the platform's path delimiter (`:` on POSIX, `;` on Windows). When set, the override **replaces** the defaults entirely; if you set it, you own the policy. A malformed value (non-absolute entry, or a directory that doesn't exist) fails fast on stderr at startup.
+Override the default set with `MARKFETCH_ALLOWED_WRITE_ROOTS` — a list of absolute paths separated by the platform's path delimiter (`:` on POSIX, `;` on Windows). When set, the override **replaces** the defaults entirely — it does not merge. To keep `os.tmpdir()` or `process.cwd()` accessible, list them yourself; the example below shows `/tmp` for that reason. A malformed value (non-absolute entry, or a directory that doesn't exist) fails fast on stderr at startup.
 
 ```json
 {

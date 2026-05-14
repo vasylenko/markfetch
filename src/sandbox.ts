@@ -30,9 +30,11 @@ export type CheckResult =
   | { ok: false; reason: string };
 
 // Defaults: realpath(os.tmpdir()) ∪ realpath(process.cwd()).
-// MARKFETCH_ALLOWED_WRITE_ROOTS REPLACES the defaults (no merge); every
-// entry must be absolute, resolvable via realpath, and a directory. Bad
-// config throws at module init — same fail-fast contract as intEnv().
+// MARKFETCH_ALLOWED_WRITE_ROOTS REPLACES the defaults (no merge) — deliberate;
+// setting it is asserting a policy, so additive defaults would weaken it.
+// Callers who want tmpdir/cwd back must list them explicitly. Every entry
+// must be absolute, resolvable via realpath, and a directory. Bad config
+// throws at module init — same fail-fast contract as intEnv().
 export async function buildAllowedRoots(
   env: NodeJS.ProcessEnv,
 ): Promise<string[]> {
