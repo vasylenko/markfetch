@@ -168,3 +168,40 @@ test("e2e: built output --version prints package version, exit 0", async () => {
   assert.equal(stderr, "");
   assert.equal(stdout, "0.6.0\n");
 });
+
+// Live E2E against real production URLs. Exercises the full pipeline
+// (HTTP/2 + Chrome fingerprint + linkedom + Readability + turndown)
+// end-to-end. Assertions are property-based (title presence, section
+// counts, chrome stripped) — they do not match exact upstream strings,
+// because the target pages will rewrite their copy over time.
+
+test("e2e live: en.wikipedia.org/wiki/Markup_language extracts title, sections, and strips chrome", async () => {
+  const { stdout, stderr } = await execFileAsync(
+    "node",
+    [BUILT_JS, "https://en.wikipedia.org/wiki/Markup_language"],
+    { timeout: 30_000, maxBuffer: 10_000_000 },
+  );
+  assert.equal(stderr, "", "stderr must stay empty on a successful fetch");
+  assert.match(stdout, /markup\s+language/i, "extracted markdown must mention the article title");
+  const h2Count = (stdout.match(/^## /gm) ?? []).length;
+  assert.ok(h2Count >= 3, `expected ≥3 H2 sections; got ${h2Count}`);
+  assert.ok(!stdout.includes("<nav"), "nav chrome must be stripped");
+  assert.ok(!stdout.includes("<script"), "script blocks must be stripped");
+  assert.ok(!stdout.includes("<style"), "style blocks must be stripped");
+  assert.ok(!stdout.includes('class="mw-'), "MediaWiki chrome classes must not leak through");
+  assert.ok(stdout.length > 5000, `markdown should be substantial; got ${stdout.length} chars`);
+});
+
+test("e2e live: code.claude.com/docs/en/commands extracts content as clean markdown", async () => {
+  const { stdout, stderr } = await execFileAsync(
+    "node",
+    [BUILT_JS, "https://code.claude.com/docs/en/commands"],
+    { timeout: 30_000, maxBuffer: 10_000_000 },
+  );
+  assert.equal(stderr, "", "stderr must stay empty on a successful fetch");
+  assert.match(stdout, /command/i, "docs page must mention 'command' somewhere");
+  assert.ok(stdout.length > 500, `markdown should be non-trivial; got ${stdout.length} chars`);
+  assert.ok(!stdout.includes("<script"), "script blocks must be stripped");
+  assert.ok(!stdout.includes("<style"), "style blocks must be stripped");
+  assert.match(stdout, /^#{1,3} /m, "extracted markdown should contain at least one heading");
+});
