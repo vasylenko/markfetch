@@ -171,6 +171,22 @@ Override the default set with `MARKFETCH_ALLOWED_WRITE_ROOTS` — a list of abso
 }
 ```
 
+On Windows, use backslashes and `;` as the delimiter:
+
+```json
+{
+  "mcpServers": {
+    "markfetch": {
+      "command": "npx",
+      "args": ["-y", "markfetch"],
+      "env": {
+        "MARKFETCH_ALLOWED_WRITE_ROOTS": "C:\\Users\\me\\markfetch-out;C:\\Users\\me\\AppData\\Local\\Temp"
+      }
+    }
+  }
+}
+```
+
 Notes:
 
 - **The sandbox is MCP-only by design.** The CLI is unrestricted — a human at the shell is the security boundary, and the markfetch CLI doesn't run any sandbox check at all. The asymmetry exists because the MCP tool is driven by a language model, which may be steered by content from a page it just fetched.

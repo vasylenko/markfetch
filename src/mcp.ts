@@ -36,7 +36,7 @@ server.registerTool(
   "fetch_markdown",
   {
     description:
-      "Fetch a single public HTTP/S URL and return its main article content as clean markdown. Best for articles, documentation, blog posts, news, and reference pages. Non-HTML responses return `unsupported_content_type`. Pure client-rendered SPAs with no extractable static HTML return `extraction_failed`; SPAs that ship server-rendered or SEO-prerendered HTML will extract whatever static content they expose. Also supports saving the markdown to a file, e.g., to bypass client tool-result size limits or to reuse later.",
+      "Fetch a single public HTTP/S URL and return its main article content as clean markdown. Best for articles, documentation, blog posts, news, and reference pages. Non-HTML responses return `unsupported_content_type`. Pure client-rendered SPAs with no extractable static HTML return `extraction_failed`; SPAs that ship server-rendered or SEO-prerendered HTML will extract whatever static content they expose. Also supports saving the markdown to a file, e.g., to bypass client tool-result size limits or to reuse later. Saved files must land inside the allowed write roots (defaults: system temp dir and the server's working directory; configurable via `MARKFETCH_ALLOWED_WRITE_ROOTS`); paths outside return `save_forbidden`.",
     inputSchema: {
       url: z
         .string()
@@ -49,7 +49,7 @@ server.registerTool(
         .refine(isAbsolute, "savePath must be an absolute filesystem path")
         .optional()
         .describe(
-          "Optional. When provided, the fetched markdown is written to this absolute filesystem path and the response becomes a small confirmation. Use this when the markdown might exceed your client's tool-result inline cap. Must be an absolute path on the host platform (e.g., `/foo/bar.md` on POSIX; `C:\\foo\\bar.md` or `\\\\server\\share\\bar.md` on Windows); relative paths and tilde paths (`~/...`) are rejected by the schema. Existing files are overwritten; the parent directory must exist (caller's responsibility). The file is written only on fetch success — fetch / extraction / size-cap errors return a `[code]` string and never touch the file.",
+          "Optional. When provided, the fetched markdown is written to this absolute filesystem path and the response becomes a small confirmation. Use this when the markdown might exceed your client's tool-result inline cap. Must be an absolute path on the host platform (e.g., `/foo/bar.md` on POSIX; `C:\\foo\\bar.md` or `\\\\server\\share\\bar.md` on Windows); relative paths and tilde paths (`~/...`) are rejected by the schema. Writes are confined to an allow-listed sandbox — defaults are the system temp dir (`os.tmpdir()`) and the server's working directory; operators can override with `MARKFETCH_ALLOWED_WRITE_ROOTS` (path-delimiter-separated). A `savePath` outside the allowed roots returns `save_forbidden` and no file is created. Existing files are overwritten; the parent directory must exist (caller's responsibility). The file is written only on fetch success — fetch / extraction / size-cap errors return a `[code]` string and never touch the file.",
         ),
     },
   },

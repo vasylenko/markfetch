@@ -11,7 +11,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, realpath, rm, symlink } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join, parse } from "node:path";
 import { buildAllowedRoots, checkPath } from "../src/sandbox.js";
@@ -45,11 +45,14 @@ test("buildAllowedRoots: empty-string env behaves like unset (defaults apply)", 
   assert.equal(roots.length, 2);
 });
 
-test("buildAllowedRoots: whitespace-only env behaves like unset", async () => {
-  const roots = await buildAllowedRoots({
-    MARKFETCH_ALLOWED_WRITE_ROOTS: "   ",
-  });
-  assert.equal(roots.length, 2);
+test("buildAllowedRoots: whitespace-only env throws fail-fast (malformed entry, not treated as unset)", async () => {
+  // Suggestion 5 from the code-review (drop outer trim) means whitespace
+  // is no longer silently treated as unset — it falls through to the
+  // isAbsolute check and fails fast like any other non-absolute value.
+  await assert.rejects(
+    () => buildAllowedRoots({ MARKFETCH_ALLOWED_WRITE_ROOTS: "   " }),
+    /every entry must be an absolute path/,
+  );
 });
 
 test("buildAllowedRoots: single-entry env REPLACES the defaults (not merge)", async () => {
@@ -86,6 +89,32 @@ test("buildAllowedRoots: non-existent entry throws fail-fast (realpath fails)", 
     await assert.rejects(
       () => buildAllowedRoots({ MARKFETCH_ALLOWED_WRITE_ROOTS: nope }),
       /could not resolve/,
+    );
+  });
+});
+
+test("buildAllowedRoots: empty entry from leading/trailing/consecutive delimiter throws fail-fast", async () => {
+  // Suggestion 1 from the code-review (drop the .filter on env split) means
+  // typo'd env vars like ":/foo" or "/foo::/bar" no longer get silently
+  // partial-accepted — empty entries fall through to isAbsolute and throw.
+  await assert.rejects(
+    () =>
+      buildAllowedRoots({
+        MARKFETCH_ALLOWED_WRITE_ROOTS: `${delimiter}/some/path`,
+      }),
+    /every entry must be an absolute path/,
+  );
+});
+
+test("buildAllowedRoots: regular-file entry throws fail-fast (must be a directory)", async () => {
+  // Suggestion 2 from the code-review: a file path pointed at by the env
+  // var is rejected at startup, not later via writeFile's ENOTDIR.
+  await withSandboxTmpDir(async (dir) => {
+    const filePath = join(dir, "regular-file.txt");
+    await writeFile(filePath, "");
+    await assert.rejects(
+      () => buildAllowedRoots({ MARKFETCH_ALLOWED_WRITE_ROOTS: filePath }),
+      /not a directory/,
     );
   });
 });

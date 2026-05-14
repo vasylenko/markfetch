@@ -406,6 +406,9 @@ function convertToMarkdown(article: {
 //   extraction_failed, too_large, save_failed
 // (The first three may also come from underlying APIs and be translated by
 // classifyError — adapters MUST run classifyError(err) in their catch blocks.)
+// Note: the MCP adapter additionally emits save_forbidden (the 8th code in
+// the contract) before fetchMarkdown is invoked — this function never throws
+// it. See src/sandbox.ts and src/mcp.ts.
 export async function fetchMarkdown(input: {
   url: string;
   savePath?: string;

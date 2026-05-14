@@ -57,13 +57,8 @@ export async function buildAllowedRoots(
   env: NodeJS.ProcessEnv,
 ): Promise<string[]> {
   const raw = env[ENV_VAR];
-  if (raw != null && raw.trim() !== "") {
-    const entries = raw.split(delimiter).filter((s) => s !== "");
-    if (entries.length === 0) {
-      throw new Error(
-        `Invalid ${ENV_VAR}=${JSON.stringify(raw)} — expected a ${JSON.stringify(delimiter)}-separated list of absolute paths.`,
-      );
-    }
+  if (raw != null && raw !== "") {
+    const entries = raw.split(delimiter);
     const resolved: string[] = [];
     for (const entry of entries) {
       if (!isAbsolute(entry)) {
@@ -71,14 +66,22 @@ export async function buildAllowedRoots(
           `Invalid ${ENV_VAR} entry ${JSON.stringify(entry)} — every entry must be an absolute path.`,
         );
       }
+      let resolvedEntry: string;
       try {
-        resolved.push(await realpath(entry));
+        resolvedEntry = await realpath(entry);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         throw new Error(
           `Invalid ${ENV_VAR} entry ${JSON.stringify(entry)} — could not resolve: ${message}`,
         );
       }
+      const stats = await stat(resolvedEntry);
+      if (!stats.isDirectory()) {
+        throw new Error(
+          `Invalid ${ENV_VAR} entry ${JSON.stringify(entry)} — resolved to ${JSON.stringify(resolvedEntry)} which is not a directory.`,
+        );
+      }
+      resolved.push(resolvedEntry);
     }
     return resolved;
   }
@@ -113,7 +116,6 @@ export async function checkPath(
   let ancestor = normalized;
   const trailing: string[] = [];
   // Deliberate single-pass loop; iteration count is bounded by path depth.
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     try {
       await stat(ancestor);

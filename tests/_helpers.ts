@@ -75,11 +75,11 @@ export function textOf(result: { content: unknown }): string {
   return content[0]?.text ?? "";
 }
 
-// Matches any of the seven [code] error prefixes the tool emits. Used by
+// Matches any of the eight [code] error prefixes the tool emits. Used by
 // schema-rejection assertions to prove the handler did NOT run — a [code]
 // prefix would mean the call escaped Zod and reached core.
 export const ERROR_CODE_PREFIX_RE =
-  /^\[(network_error|http_error|timeout|unsupported_content_type|extraction_failed|too_large|save_failed)\]/;
+  /^\[(network_error|http_error|timeout|unsupported_content_type|extraction_failed|too_large|save_failed|save_forbidden)\]/;
 
 // Asserts that a tool call is rejected at the Zod schema boundary, not by the
 // handler. The SDK either throws (some versions) or returns isError:true with
