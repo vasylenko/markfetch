@@ -59,7 +59,7 @@ gemini mcp add -s user markfetch npx -y markfetch
 | Generic Playwright / Puppeteer | ✓ | – | – | – |
 | `mcp-server-fetch` (Python) | – | basic | – | – |
 | CloudFlare `/markdown` | ✓ | ✓ | – | paid |
-| **`markfetch`** | **✓** | **✓** | **✓ (7 codes)** | **✓** |
+| **`markfetch`** | **✓** | **✓** | **✓ (8 codes)** | **✓** |
 
 - **Real-browser HTTP/2 + Chrome fingerprint.** ALPN-negotiated h2, `User-Agent`, `Sec-CH-UA-*`, `Sec-Fetch-*`, `Accept-*`. A Chrome UA with no client hints is a *stronger* automation signal than curl — `markfetch` sends the full coherent set, derived from the UA at startup so an override stays internally consistent.
 
@@ -108,6 +108,19 @@ Flags:
 
 Errors go to stderr with the same `[code] message` shape the MCP tool returns (see the table below), and the process exits with a non-zero status. The same env vars (`MARKFETCH_TIMEOUT_MS`, `MARKFETCH_MAX_BYTES`, `MARKFETCH_USER_AGENT`) apply in both modes.
 
+Errors carry one of eight deterministic codes:
+
+| Code | Meaning |
+|---|---|
+| `network_error` | DNS / TCP / TLS failure, or an unexpected internal error from the fetcher. |
+| `http_error` | Upstream returned a non-2xx status. |
+| `timeout` | Per-request budget `MARKFETCH_TIMEOUT_MS` exceeded. |
+| `unsupported_content_type` | Response was not `text/html` or `application/xhtml+xml`. |
+| `extraction_failed` | Readability returned no article content (typical for pure client-rendered SPAs). |
+| `too_large` | Response body or extracted markdown exceeded `MARKFETCH_MAX_BYTES`. |
+| `save_failed` | `savePath` was given but `writeFile` failed (parent directory missing, permission denied, etc.). |
+| `save_forbidden` | `savePath` resolves outside the allowed write roots — see [Write sandbox](#write-sandbox). MCP-only; the CLI has no sandbox. |
+
 ## What it is not
 
 - **Not a crawler.** No recursion, no `robots.txt` parsing, no rate-limit orchestration. One URL in, one document out.
@@ -138,9 +151,51 @@ Pass overrides via the `env` block of your MCP client config:
 }
 ```
 
+### Write sandbox
+
+MCP `savePath` writes are confined to a set of allowed root directories. By default the allowed set is `os.tmpdir()` ∪ `process.cwd()` (each resolved via `fs.realpath` once at startup). A `savePath` outside that set returns `save_forbidden` and no file is created.
+
+Override the default set with `MARKFETCH_ALLOWED_WRITE_ROOTS` — a list of absolute paths separated by the platform's path delimiter (`:` on POSIX, `;` on Windows). When set, the override **replaces** the defaults entirely — it does not merge. To keep `os.tmpdir()` or `process.cwd()` accessible, list them yourself; the example below shows `/tmp` for that reason. A malformed value (non-absolute entry, or a directory that doesn't exist) fails fast on stderr at startup.
+
+```json
+{
+  "mcpServers": {
+    "markfetch": {
+      "command": "npx",
+      "args": ["-y", "markfetch"],
+      "env": {
+        "MARKFETCH_ALLOWED_WRITE_ROOTS": "/Users/me/markfetch-out:/tmp"
+      }
+    }
+  }
+}
+```
+
+On Windows, use backslashes and `;` as the delimiter:
+
+```json
+{
+  "mcpServers": {
+    "markfetch": {
+      "command": "npx",
+      "args": ["-y", "markfetch"],
+      "env": {
+        "MARKFETCH_ALLOWED_WRITE_ROOTS": "C:\\Users\\me\\markfetch-out;C:\\Users\\me\\AppData\\Local\\Temp"
+      }
+    }
+  }
+}
+```
+
+Notes:
+
+- **The sandbox is MCP-only by design.** The CLI is unrestricted — a human at the shell is the security boundary, and the markfetch CLI doesn't run any sandbox check at all. The asymmetry exists because the MCP tool is driven by a language model, which may be steered by content from a page it just fetched.
+- **Symlinks pointing outside are blocked.** Each candidate `savePath` is resolved via `fs.realpath` to its real destination before the containment check, so a symlink planted inside the sandbox cannot be used to escape.
+- **Containment is case-insensitive on Windows** (`C:\Users\Bob` and `c:\users\bob` are the same path).
+
 ## Develop
 
-Requires Node.js ≥ 24.
+Requires Node.js ≥ 24. Tested on Linux, macOS, and Windows in CI.
 
 When iterating on CLI changes, `tsx src/index.ts <url>` and `tsx src/index.ts --help` route through the same argv-discriminated dispatcher as the built `dist/index.js` — no rebuild needed between edits.
 

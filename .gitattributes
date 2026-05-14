@@ -1,0 +1,3 @@
+# Keep text files LF on all platforms. Windows runners would otherwise
+# autocrlf .md fixtures to CRLF and break snapshot tests.
+* text=auto eol=lf

@@ -9,15 +9,11 @@ import { promisify } from "node:util";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve as resolvePath } from "node:path";
-import { startMock, HAPPY_FIXTURE } from "./_helpers.js";
+import { startMock, HAPPY_FIXTURE, TSX_LOADER_URL } from "./_helpers.js";
 
 const execFileAsync = promisify(execFile);
 
-// Resolved at module load against the test runner's cwd (the project root).
-// Tests that override `cwd` to a tmpdir still need to find the tsx CLI
-// and the source entry — passing relative paths would resolve against the
-// new cwd and produce a confusing ENOENT instead of the behavior under test.
-const TSX_CLI = resolvePath("./node_modules/.bin/tsx");
+// Absolute so tests that override the child cwd still locate the entry.
 const ENTRY = resolvePath("src/index.ts");
 
 type RunResult = { code: number; stdout: string; stderr: string };
@@ -38,8 +34,8 @@ async function runCli(
 ): Promise<RunResult> {
   try {
     const { stdout, stderr } = await execFileAsync(
-      TSX_CLI,
-      [ENTRY, ...args],
+      process.execPath,
+      ["--import", TSX_LOADER_URL, ENTRY, ...args],
       {
         env: { ...process.env, ...env } as Record<string, string>,
         cwd,
@@ -176,8 +172,9 @@ test("CLI: timeout when MARKFETCH_TIMEOUT_MS is small and server hangs", async (
     assert.notEqual(code, 0);
     assert.equal(stdout, "");
     assert.match(stderr, /^\[timeout\]/);
-    // 1500ms allows for tsx cold-start; the timeout itself fires at 200ms.
-    assert.ok(elapsed < 1500, `timeout should fire fast; took ${elapsed}ms`);
+    // 3000ms is generous headroom for node + tsx ESM-loader cold-start
+    // (especially slow Windows runners); the timeout itself fires at 200ms.
+    assert.ok(elapsed < 3000, `timeout should fire fast; took ${elapsed}ms`);
   } finally {
     await mock.close();
   }
@@ -196,7 +193,7 @@ test("CLI: --version prints version to stdout, exit 0", async () => {
   const { code, stdout, stderr } = await runCli(["--version"]);
   assert.equal(code, 0);
   assert.equal(stderr, "");
-  assert.equal(stdout, "0.5.0\n");
+  assert.equal(stdout, "0.6.0\n");
 });
 
 // This test documents a deliberate asymmetry vs MCP: a malformed URL is NOT

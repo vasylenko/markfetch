@@ -9,9 +9,11 @@ import {
   access,
   writeFile,
   rm,
+  mkdir,
+  symlink,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, parse } from "node:path";
 import {
   startMock,
   textOf,
@@ -26,7 +28,7 @@ test("server boots over stdio and completes the initialize handshake", async () 
   try {
     const info = client.getServerVersion();
     assert.equal(info?.name, "markfetch");
-    assert.equal(info?.version, "0.5.0");
+    assert.equal(info?.version, "0.6.0");
   } finally {
     await client.close();
   }
@@ -514,25 +516,31 @@ test("savePath: writeFile rejection surfaces as [save_failed] with errno; file i
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     res.end(HAPPY_FIXTURE);
   });
-  const savePath = "/nonexistent-parent-zzz-savepath-test/out.md";
-  const client = await spawnClient();
-  try {
-    const result = await client.callTool({
-      name: "fetch_markdown",
-      arguments: { url: mock.url, savePath },
-    });
-    assert.equal(result.isError, true);
-    assert.match(textOf(result), /^\[save_failed\]/);
-    assert.match(textOf(result), /ENOENT/);
-    await assert.rejects(
-      access(savePath),
-      /ENOENT/,
-      "file must not have been created on save failure",
-    );
-  } finally {
-    await client.close();
-    await mock.close();
-  }
+  // Path lives inside the default sandbox (os.tmpdir() via mkdtemp), so the
+  // sandbox check passes and writeFile actually runs. The "nonexistent-subdir"
+  // intermediate doesn't exist, so writeFile fails with ENOENT — exercising
+  // the save_failed branch of core.ts.
+  await withTmpDir(async (dir) => {
+    const savePath = join(dir, "nonexistent-subdir", "out.md");
+    const client = await spawnClient();
+    try {
+      const result = await client.callTool({
+        name: "fetch_markdown",
+        arguments: { url: mock.url, savePath },
+      });
+      assert.equal(result.isError, true);
+      assert.match(textOf(result), /^\[save_failed\]/);
+      assert.match(textOf(result), /ENOENT/);
+      await assert.rejects(
+        access(savePath),
+        /ENOENT/,
+        "file must not have been created on save failure",
+      );
+    } finally {
+      await client.close();
+      await mock.close();
+    }
+  });
 });
 
 // T6 — THE Invariant. The file at savePath is only ever the markdown of the URL (per README and SPEC.md).
@@ -628,3 +636,188 @@ test("savePath: existing file is overwritten", async () => {
     }
   });
 });
+
+// T9 — savePath outside the default sandbox → [save_forbidden]; no file.
+test("savePath sandbox: path outside default roots → [save_forbidden] and file not written", async () => {
+  const mock = await startMock((_req, res) => {
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    res.end(HAPPY_FIXTURE);
+  });
+  // Construct a forbidden path without hardcoding "/etc" or "C:\\Windows".
+  // Filesystem root + sentinel filename is outside any mkdtemp dir under
+  // tmpdir, and outside the test runner's cwd (the repo root). On POSIX
+  // this is "/markfetch-sandbox-forbidden.md"; on Windows it is
+  // "C:\\markfetch-sandbox-forbidden.md".
+  const forbiddenPath = join(
+    parse(tmpdir()).root,
+    "markfetch-sandbox-forbidden.md",
+  );
+  const client = await spawnClient();
+  try {
+    const result = await client.callTool({
+      name: "fetch_markdown",
+      arguments: { url: mock.url, savePath: forbiddenPath },
+    });
+    assert.equal(result.isError, true);
+    const text = textOf(result);
+    assert.match(text, /^\[save_forbidden\]/);
+    assert.ok(
+      text.includes("outside the allowed write roots"),
+      `error must explain the rule for caller recovery; got: ${text}`,
+    );
+    await assert.rejects(
+      access(forbiddenPath),
+      /ENOENT/,
+      "save_forbidden must not create the file",
+    );
+  } finally {
+    await client.close();
+    await mock.close();
+  }
+});
+
+// T10 — symlink inside sandbox pointing outside is blocked by realpath.
+// POSIX-gated: Windows symlink creation typically requires elevation, and
+// the property under test is platform-independent in src/sandbox.ts, so
+// POSIX coverage is sufficient.
+test(
+  "savePath sandbox: symlink escape from inside sandbox is blocked",
+  { skip: process.platform === "win32" },
+  async () => {
+    const mock = await startMock((_req, res) => {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(HAPPY_FIXTURE);
+    });
+    await withTmpDir(async (sandboxDir) => {
+      // Plant a symlink inside the sandbox dir pointing to filesystem root
+      // (definitely outside tmpdir). Then write through the symlink and
+      // expect rejection — realpath in checkPath resolves the symlink and
+      // the containment check sees the outside-the-sandbox target.
+      const innerDir = join(sandboxDir, "inner");
+      await mkdir(innerDir);
+      const escapeLink = join(innerDir, "escape");
+      const outsideRoot = parse(tmpdir()).root;
+      await symlink(outsideRoot, escapeLink);
+      const target = join(escapeLink, "markfetch-symlink-escape.md");
+      const realTarget = join(outsideRoot, "markfetch-symlink-escape.md");
+      const client = await spawnClient();
+      try {
+        const result = await client.callTool({
+          name: "fetch_markdown",
+          arguments: { url: mock.url, savePath: target },
+        });
+        assert.equal(result.isError, true);
+        assert.match(textOf(result), /^\[save_forbidden\]/);
+        await assert.rejects(
+          access(realTarget),
+          /ENOENT/,
+          "symlink-escape attempt must not write to the symlink target",
+        );
+      } finally {
+        await client.close();
+        await mock.close();
+      }
+    });
+  },
+);
+
+// T11 — MARKFETCH_ALLOWED_WRITE_ROOTS REPLACES the defaults (not merges).
+test("savePath sandbox: MARKFETCH_ALLOWED_WRITE_ROOTS replaces the defaults", async () => {
+  const mock = await startMock((_req, res) => {
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    res.end(HAPPY_FIXTURE);
+  });
+  await withTmpDir(async (customRoot) => {
+    // Spawn the MCP server with the override pointing at customRoot only.
+    // If the override merged with defaults instead of replacing them, a
+    // sibling tmpdir path would still be allowed — the second assertion
+    // proves it doesn't.
+    const client = await spawnClient({
+      env: { MARKFETCH_ALLOWED_WRITE_ROOTS: customRoot },
+    });
+    try {
+      // (a) Inside the override root → success.
+      const insideCustom = join(customRoot, "inside.md");
+      const ok = await client.callTool({
+        name: "fetch_markdown",
+        arguments: { url: mock.url, savePath: insideCustom },
+      });
+      assert.equal(
+        ok.isError,
+        false,
+        `write inside override root must succeed; got: ${textOf(ok)}`,
+      );
+
+      // (b) Inside os.tmpdir() but outside the override root → forbidden.
+      // A sibling mkdtemp dir is inside tmpdir but outside customRoot.
+      await withTmpDir(async (siblingDir) => {
+        const outsideCustom = join(siblingDir, "outside-override.md");
+        const denied = await client.callTool({
+          name: "fetch_markdown",
+          arguments: { url: mock.url, savePath: outsideCustom },
+        });
+        assert.equal(
+          denied.isError,
+          true,
+          "path inside tmpdir-but-outside-override must be rejected (proves replace, not merge)",
+        );
+        assert.match(textOf(denied), /^\[save_forbidden\]/);
+      });
+    } finally {
+      await client.close();
+      await mock.close();
+    }
+  });
+});
+
+// T12 — bad MARKFETCH_ALLOWED_WRITE_ROOTS fails fast at startup.
+// Mirrors the existing intEnv fail-fast tests for MARKFETCH_TIMEOUT_MS /
+// MARKFETCH_MAX_BYTES / MARKFETCH_USER_AGENT.
+test("env-var validation: non-absolute MARKFETCH_ALLOWED_WRITE_ROOTS fails fast at startup", async () => {
+  const { exitCode, stderr } = await spawnAndCaptureExit(["src/index.ts"], {
+    MARKFETCH_ALLOWED_WRITE_ROOTS: "relative/path",
+  });
+  assert.notEqual(
+    exitCode,
+    0,
+    "subprocess must exit non-zero when sandbox env var is malformed",
+  );
+  assert.match(stderr, /MARKFETCH_ALLOWED_WRITE_ROOTS/);
+  assert.match(stderr, /absolute path/);
+});
+
+// T13 — Windows-shaped absolute path accepted at the schema and writes.
+// Win32-gated. Regression guard against reverting the schema from
+// path.isAbsolute back to startsWith("/"). The Windows shape must flow
+// schema → sandbox check (tmpdir is in defaults) → writeFile.
+test(
+  "savePath: Windows-shaped absolute path is accepted at the schema and writes (win32-gated)",
+  { skip: process.platform !== "win32" },
+  async () => {
+    const mock = await startMock((_req, res) => {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(HAPPY_FIXTURE);
+    });
+    await withTmpDir(async (dir) => {
+      // On Windows, join() with a Windows-shaped tmpdir produces a
+      // backslash path like C:\Users\...\Temp\xxxxx\win-shape.md.
+      const savePath = join(dir, "win-shape.md");
+      const client = await spawnClient();
+      try {
+        const result = await client.callTool({
+          name: "fetch_markdown",
+          arguments: { url: mock.url, savePath },
+        });
+        assert.equal(
+          result.isError,
+          false,
+          `Windows-shaped path must be accepted; got: ${textOf(result)}`,
+        );
+        await access(savePath);
+      } finally {
+        await client.close();
+        await mock.close();
+      }
+    });
+  },
+);

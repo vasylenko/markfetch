@@ -9,7 +9,14 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # fail-fast: false lets a failure on one OS surface all of the
+    # others' results in the same run, instead of cancelling siblings.
+    # Cheaper to read than re-running individually for each.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: read
     steps:
@@ -24,4 +31,9 @@ jobs:
         run: npm ci
 
       - name: Run tests
+        # `npm test` runs `tsx --test tests/*.test.ts`. The glob is
+        # shell-expanded; cmd.exe (Windows default) doesn't expand it,
+        # so we pin Git Bash — preinstalled on the windows-latest runner.
+        # No-op on Linux/macOS where bash is already the default.
+        shell: bash
         run: npm test

@@ -13,7 +13,7 @@ URL
   → caller             markdown body, or "Saved N bytes to /path" confirmation
 ```
 
-Errors throw `MarkfetchError` uniformly from core; adapters catch once. Codes: `network_error`, `http_error`, `timeout`, `unsupported_content_type`, `extraction_failed`, `too_large`, `save_failed`. CLI emits `[code] message` to stderr and exits 1; MCP emits `{ isError: true, content: [{ text: "[code] message" }] }`.
+Errors throw `MarkfetchError` uniformly from core; adapters catch once. Codes: `network_error`, `http_error`, `timeout`, `unsupported_content_type`, `extraction_failed`, `too_large`, `save_failed`; plus `save_forbidden`, emitted by the MCP adapter only (before `fetchMarkdown` runs — see "Asymmetric write sandbox" under Core Decisions). CLI emits `[code] message` to stderr and exits 1; MCP emits `{ isError: true, content: [{ text: "[code] message" }] }`.
 
 ## Core Decisions
 
@@ -21,7 +21,7 @@ Errors throw `MarkfetchError` uniformly from core; adapters catch once. Codes: `
 
 - **Lazy adapter imports.** The dispatcher uses `await import()` to load exactly one adapter. The only `console.log` in the project lives in `cli.ts`; under MCP, `cli.ts` never loads, so stdout-discipline is enforced by the module graph — not by linter or convention.
 
-- **Core throws, adapters translate.** All 7 error codes surface from `core.ts` — five are thrown explicitly as `MarkfetchError`; `network_error`, `timeout`, and (sometimes) `http_error` are translated by `classifyError` from underlying-API errors (undici TypeErrors, AbortSignal timeouts). New codes need an `ErrorCode` union member + a throw site; adapters don't change.
+- **Core throws, adapters translate.** Seven of the eight error codes surface from `core.ts` — five are thrown explicitly as `MarkfetchError`; `network_error`, `timeout`, and (sometimes) `http_error` are translated by `classifyError` from underlying-API errors (undici TypeErrors, AbortSignal timeouts). The eighth code, `save_forbidden`, is the exception — it's emitted by the MCP adapter before `fetchMarkdown` is invoked (see "Asymmetric write sandbox" below). New core codes need an `ErrorCode` union member + a throw site; adapters don't change.
 
 - **HTTP/2 + coherent Chrome fingerprint.** Wire protocol, headers, and UA must agree — a Chrome UA over HTTP/1.1 or without `Sec-CH-UA-*` is *more* suspicious than curl. `Sec-CH-UA-*` is derived from `MARKFETCH_USER_AGENT` at startup so override-coherence is mechanical.
 
@@ -29,9 +29,11 @@ Errors throw `MarkfetchError` uniformly from core; adapters catch once. Codes: `
 
 - **Whole document or `too_large`.** No pagination. Partial content lets the agent reason over truncated bodies without knowing they're truncated. `savePath` / `-o` is the escape valve for genuinely large documents.
 
-- **Asymmetric `savePath`.** MCP requires absolute paths (zod `startsWith("/")`); CLI accepts relative and resolves against `process.cwd()`. CLI has a stable cwd the user typed `cd` into; MCP servers run in whatever cwd the client picks.
+- **Asymmetric `savePath`.** MCP requires absolute paths via zod `refine(path.isAbsolute)` — accepts platform-appropriate shapes on POSIX (`/foo`) and Windows (`C:\foo`, `C:/foo`, `\\server\share`, `\foo`). CLI accepts relative and resolves against `process.cwd()`. CLI has a stable cwd the user typed `cd` into; MCP servers run in whatever cwd the client picks.
 
-- **Stderr is fatal-only.** Per-request MCP errors round-trip through `{ isError }`; only startup misconfig / unrecoverable crashes touch stderr. CLI is its own session, so its per-request errors *are* fatal for that session. Regression guard: `tests/server.test.ts:436`.
+- **Asymmetric write sandbox.** MCP `savePath` writes are confined to `realpath(os.tmpdir())` ∪ `realpath(process.cwd())` by default; the env var `MARKFETCH_ALLOWED_WRITE_ROOTS` (path-delimiter-separated) replaces the defaults. CLI writes anywhere the human's shell permits — no sandbox check. The asymmetry reflects the threat model: an LLM driving the MCP tool may be steered by content from the page it just fetched; a human typing into a shell is the security boundary. Symlinks are resolved via `fs.realpath` before the containment check, so a planted symlink inside the sandbox cannot escape. Containment compare is case-insensitive on `process.platform === "win32"`. Implementation lives in `src/sandbox.ts` (a leaf module — no imports from siblings — so it's unit-testable without spinning up the MCP server). Known limitation: TOCTOU between `realpath` and `writeFile` is not closed — acceptable for a single-user developer tool.
+
+- **Stderr is fatal-only.** Per-request MCP errors round-trip through `{ isError }`; only startup misconfig / unrecoverable crashes touch stderr. CLI is its own session, so its per-request errors *are* fatal for that session. Regression guard: `tests/server.test.ts:336`.
 
 ## Ideas for future
 
@@ -41,4 +43,3 @@ Errors throw `MarkfetchError` uniformly from core; adapters catch once. Codes: `
 - **Cookie reuse across redirects within a single fetch.** Currently none. Trigger: a target serves content only after a session-cookie redirect.
 - **Proxy support** (`MARKFETCH_PROXY_URL`) and **`Accept-Language` control** (`MARKFETCH_ACCEPT_LANGUAGE`). Trigger: corporate proxy / locale-specific content.
 - **Single-binary distribution.** Bun's `build --compile`, Node SEA, or similar. Trigger: `npx` first-run latency feedback, or an offline / airgapped need.
-- **Windows-friendly `savePath` schema.** Currently Unix-shaped (`startsWith("/")`). Trigger: someone needs this on Windows.

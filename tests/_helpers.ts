@@ -10,8 +10,20 @@ import {
   type IncomingMessage,
   type ServerResponse,
 } from "node:http";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+
+// Absolute file:// URL for tsx's loader. Spawn the CLI via
+// `node --import <url> src/index.ts` to bypass the `./node_modules/.bin/tsx`
+// shim (a .cmd on Windows that child_process.spawn can't launch without
+// shell:true). Absolute so tests that override the child cwd still work.
+// spawnClient stays on `command: "tsx"` — StdioClientTransport handles
+// cross-platform spawn itself.
+export const TSX_LOADER_URL = pathToFileURL(
+  resolve("./node_modules/tsx/dist/loader.mjs"),
+).href;
 
 export async function startMock(
   handler: (req: IncomingMessage, res: ServerResponse) => void,
@@ -58,11 +70,11 @@ export function textOf(result: { content: unknown }): string {
   return content[0]?.text ?? "";
 }
 
-// Matches any of the seven [code] error prefixes the tool emits. Used by
+// Matches any of the eight [code] error prefixes the tool emits. Used by
 // schema-rejection assertions to prove the handler did NOT run — a [code]
 // prefix would mean the call escaped Zod and reached core.
 export const ERROR_CODE_PREFIX_RE =
-  /^\[(network_error|http_error|timeout|unsupported_content_type|extraction_failed|too_large|save_failed)\]/;
+  /^\[(network_error|http_error|timeout|unsupported_content_type|extraction_failed|too_large|save_failed|save_forbidden)\]/;
 
 // Asserts that a tool call is rejected at the Zod schema boundary, not by the
 // handler. The SDK either throws (some versions) or returns isError:true with
@@ -103,10 +115,14 @@ export async function spawnAndCaptureExit(
   args: string[],
   env: Record<string, string>,
 ): Promise<{ exitCode: number; stderr: string }> {
-  const child = spawn("./node_modules/.bin/tsx", args, {
-    env: { ...process.env, ...env } as Record<string, string>,
-    stdio: ["pipe", "pipe", "pipe"],
-  });
+  const child = spawn(
+    process.execPath,
+    ["--import", TSX_LOADER_URL, ...args],
+    {
+      env: { ...process.env, ...env } as Record<string, string>,
+      stdio: ["pipe", "pipe", "pipe"],
+    },
+  );
   let stderr = "";
   child.stderr.on("data", (d: Buffer) => {
     stderr += d.toString();
