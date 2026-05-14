@@ -13,13 +13,7 @@ import { startMock, HAPPY_FIXTURE, TSX_LOADER_URL } from "./_helpers.js";
 
 const execFileAsync = promisify(execFile);
 
-// Resolved at module load against the test runner's cwd (the project root).
-// Tests that override `cwd` to a tmpdir still need to find the source entry
-// — a relative path would resolve against the new cwd and produce a
-// confusing ENOENT instead of the behavior under test. The tsx loader is
-// imported via TSX_LOADER_URL (an absolute file:// URL from _helpers.ts)
-// for the same portability reason; it also bypasses the platform-specific
-// `./node_modules/.bin/tsx[.cmd]` shim entirely.
+// Absolute so tests that override the child cwd still locate the entry.
 const ENTRY = resolvePath("src/index.ts");
 
 type RunResult = { code: number; stdout: string; stderr: string };

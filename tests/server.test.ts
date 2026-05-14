@@ -637,16 +637,6 @@ test("savePath: existing file is overwritten", async () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Sandbox (write-path guardrails on the MCP side)
-//
-// MCP `savePath` writes are confined to allowed roots — by default
-// realpath(os.tmpdir()) ∪ realpath(process.cwd()), overridable via the
-// MARKFETCH_ALLOWED_WRITE_ROOTS env var. The CLI is intentionally NOT
-// guard-railed (covered in tests/cli.test.ts); the asymmetry reflects
-// the threat model (LLM caller vs. human caller).
-// ---------------------------------------------------------------------------
-
 // T9 — savePath outside the default sandbox → [save_forbidden]; no file.
 test("savePath sandbox: path outside default roots → [save_forbidden] and file not written", async () => {
   const mock = await startMock((_req, res) => {

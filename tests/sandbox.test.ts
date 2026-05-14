@@ -22,10 +22,6 @@ async function withSandboxTmpDir<T>(fn: (dir: string) => Promise<T>): Promise<T>
   }
 }
 
-// ---------------------------------------------------------------------------
-// buildAllowedRoots — env-parsing edge cases not exercised by integration.
-// ---------------------------------------------------------------------------
-
 test("buildAllowedRoots: multi-entry env split by path.delimiter", async () => {
   await withSandboxTmpDir(async (a) => {
     await withSandboxTmpDir(async (b) => {
@@ -67,10 +63,6 @@ test("buildAllowedRoots: regular-file entry throws fail-fast (must be a director
     );
   });
 });
-
-// ---------------------------------------------------------------------------
-// checkPath — narrow containment-logic edge cases.
-// ---------------------------------------------------------------------------
 
 test("checkPath: ../ traversal that escapes a root is not ok", async () => {
   await withSandboxTmpDir(async (dir) => {
