@@ -52,24 +52,34 @@ server.registerTool(
   },
   async ({ url, savePath }) => {
     // Sandbox gate (MCP-only; CLI is intentionally unbounded). Runs before
-    // fetchMarkdown so a forbidden path short-circuits the fetch.
+    // fetchMarkdown so a forbidden path short-circuits the fetch. The
+    // canonicalized check.resolved — not the caller's savePath — is what
+    // flows into writeFile, so an in-path symlink followed by `..` cannot
+    // erase the sandbox boundary lexically before the OS dereferences it.
+    let resolvedSavePath: string | undefined;
     if (savePath !== undefined) {
       const check = await checkPath(savePath, ALLOWED_ROOTS);
       if (!check.ok) {
         return errorResult("save_forbidden", check.reason);
       }
+      resolvedSavePath = check.resolved;
     }
     try {
       const { markdown, bytes, savedTo } = await fetchMarkdown({
         url,
-        savePath,
+        savePath: resolvedSavePath,
       });
       if (savedTo !== undefined) {
+        // Echo the caller's original savePath in the confirmation. The bytes
+        // landed at the canonicalized resolvedSavePath; on hosts where tmpdir
+        // is symlinked (macOS /var → /private/var) the realpath form differs
+        // from what the caller typed, and the symbolic path is the more
+        // useful surface for the caller.
         return {
           content: [
             {
               type: "text" as const,
-              text: `Saved ${bytes} bytes to ${savedTo}`,
+              text: `Saved ${bytes} bytes to ${savePath}`,
             },
           ],
           isError: false,

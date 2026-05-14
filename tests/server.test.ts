@@ -721,6 +721,77 @@ test(
   },
 );
 
+// T10b — symlink + lexical `..` cannot bypass the sandbox.
+// path.resolve collapses `..` BEFORE the OS dereferences the symlink, so a
+// naive containment check on the resolved string sees the target back inside
+// the sandbox while the OS would actually write to <link-target>/.. on
+// writeFile. mcp.ts must pass checkPath's canonicalized resolved path — not
+// the caller's savePath — through to fetchMarkdown for the write to land at
+// the validated location.
+//
+// Test design: constrain the allowed roots to sandboxDir only (so tmpdir is
+// outside the sandbox), plant a symlink inside sandboxDir pointing at an
+// outsideDir sibling, then send savePath=`<sandboxDir>/link/../escape.md`.
+// Pre-fix: writeFile lands at <tmpdir>/escape.md (outside the sandbox).
+// Post-fix: writeFile lands at <sandboxDir>/escape.md.
+test(
+  "savePath sandbox: symlink + lexical .. attack writes to validated path, not deceptive path",
+  { skip: process.platform === "win32" },
+  async () => {
+    const mock = await startMock((_req, res) => {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(HAPPY_FIXTURE);
+    });
+    await withTmpDir(async (sandboxDir) => {
+      await withTmpDir(async (outsideDir) => {
+        const link = join(sandboxDir, "out-link");
+        await symlink(outsideDir, link);
+        // Unique filename so a stray file from a crashed run can't satisfy
+        // the negative assertion below.
+        const escapeFilename = `markfetch-symlink-dotdot-escape-${process.pid}-${Date.now()}.md`;
+        // String-concatenate (not path.join) so the literal `..` segment
+        // survives transmission to the MCP tool. path.join normalizes `..`
+        // lexically, which would mask the very bug under test before the
+        // tool ever sees the payload.
+        const attackPath = `${link}/../${escapeFilename}`;
+        const validatedPath = join(sandboxDir, escapeFilename);
+        // Where left-to-right OS path resolution of attackPath would land:
+        // enter link → outsideDir; `..` → parent-of-outsideDir (= tmpdir);
+        // then escapeFilename.
+        const deceptiveTarget = join(parse(outsideDir).dir, escapeFilename);
+        await assert.rejects(
+          access(deceptiveTarget),
+          /ENOENT/,
+          "precondition: deceptiveTarget must not pre-exist for this test to be meaningful",
+        );
+        const client = await spawnClient({
+          env: { MARKFETCH_ALLOWED_WRITE_ROOTS: sandboxDir },
+        });
+        try {
+          const result = await client.callTool({
+            name: "fetch_markdown",
+            arguments: { url: mock.url, savePath: attackPath },
+          });
+          assert.equal(
+            result.isError,
+            false,
+            `expected success at validated path; got ${textOf(result)}`,
+          );
+          await access(validatedPath);
+          await assert.rejects(
+            access(deceptiveTarget),
+            /ENOENT/,
+            "symlink + .. attack must not produce a file at the OS-resolved deceptive target",
+          );
+        } finally {
+          await client.close();
+          await mock.close();
+        }
+      });
+    });
+  },
+);
+
 // T11 — MARKFETCH_ALLOWED_WRITE_ROOTS REPLACES the defaults (not merges).
 test("savePath sandbox: MARKFETCH_ALLOWED_WRITE_ROOTS replaces the defaults", async () => {
   const mock = await startMock((_req, res) => {

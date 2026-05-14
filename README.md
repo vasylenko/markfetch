@@ -106,7 +106,7 @@ Flags:
 | `-V, --version` | Print version and exit. |
 | `-h, --help` | Print usage and exit. |
 
-Errors go to stderr with the same `[code] message` shape the MCP tool returns (see the table below), and the process exits with a non-zero status. The same env vars (`MARKFETCH_TIMEOUT_MS`, `MARKFETCH_MAX_BYTES`, `MARKFETCH_USER_AGENT`) apply in both modes.
+Errors go to stderr with the same `[code] message` shape the MCP tool returns (see the table below), and the process exits with a non-zero status. The same env vars (`MARKFETCH_TIMEOUT_MS`, `MARKFETCH_MAX_BYTES`, `MARKFETCH_USER_AGENT`) apply in both modes. `MARKFETCH_ALLOWED_WRITE_ROOTS` is MCP-only — see [Write sandbox](#write-sandbox).
 
 Errors carry one of eight deterministic codes:
 
@@ -134,6 +134,7 @@ Errors carry one of eight deterministic codes:
 | `MARKFETCH_TIMEOUT_MS` | `30000` | Per-request timeout in ms |
 | `MARKFETCH_MAX_BYTES` | `5000000` | Cap on response body and extracted markdown |
 | `MARKFETCH_USER_AGENT` | Pinned Chrome 130 string | Override the UA. Must be a Chrome UA — `Sec-CH-UA-*` client hints are derived from it at startup; non-Chrome strings fail fast |
+| `MARKFETCH_ALLOWED_WRITE_ROOTS` | `os.tmpdir()` + `process.cwd()` | MCP-only. Path-delimiter-separated list of absolute paths permitted as MCP `savePath` write roots. Replaces the defaults entirely — see [Write sandbox](#write-sandbox) |
 
 Pass overrides via the `env` block of your MCP client config:
 
