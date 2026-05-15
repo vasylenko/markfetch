@@ -39,34 +39,52 @@ export async function buildAllowedRoots(
   env: NodeJS.ProcessEnv,
 ): Promise<string[]> {
   const raw = env[ENV_VAR];
-  if (raw != null && raw !== "") {
-    const resolved: string[] = [];
-    for (const entry of raw.split(delimiter)) {
-      if (!isAbsolute(entry)) {
-        throw new Error(
-          `Invalid ${ENV_VAR} entry ${JSON.stringify(entry)} — every entry must be an absolute path.`,
-        );
-      }
-      let resolvedEntry: string;
-      try {
-        resolvedEntry = await realpath(entry);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        throw new Error(
-          `Invalid ${ENV_VAR} entry ${JSON.stringify(entry)} — could not resolve: ${message}`,
-        );
-      }
-      const stats = await stat(resolvedEntry);
-      if (!stats.isDirectory()) {
-        throw new Error(
-          `Invalid ${ENV_VAR} entry ${JSON.stringify(entry)} — resolved to ${JSON.stringify(resolvedEntry)} which is not a directory.`,
-        );
-      }
-      resolved.push(resolvedEntry);
-    }
-    return resolved;
+  if (raw == null || raw === "") {
+    return [await realpath(tmpdir()), await realpath(process.cwd())];
   }
-  return [await realpath(tmpdir()), await realpath(process.cwd())];
+  const resolved: string[] = [];
+  for (const entry of raw.split(delimiter)) {
+    if (!isAbsolute(entry)) {
+      throw new Error(
+        `Invalid ${ENV_VAR} entry ${JSON.stringify(entry)} — every entry must be an absolute path.`,
+      );
+    }
+    let resolvedEntry: string;
+    try {
+      resolvedEntry = await realpath(entry);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `Invalid ${ENV_VAR} entry ${JSON.stringify(entry)} — could not resolve: ${message}`,
+      );
+    }
+    const stats = await stat(resolvedEntry);
+    if (!stats.isDirectory()) {
+      throw new Error(
+        `Invalid ${ENV_VAR} entry ${JSON.stringify(entry)} — resolved to ${JSON.stringify(resolvedEntry)} which is not a directory.`,
+      );
+    }
+    resolved.push(resolvedEntry);
+  }
+  return resolved;
+}
+
+async function walkToExtantAncestor(
+  start: string,
+): Promise<{ ancestor: string; trailing: string[] } | null> {
+  let ancestor = start;
+  const trailing: string[] = [];
+  while (true) {
+    try {
+      await stat(ancestor);
+      return { ancestor, trailing };
+    } catch {
+      const parent = dirname(ancestor);
+      if (parent === ancestor) return null;
+      trailing.unshift(parse(ancestor).base);
+      ancestor = parent;
+    }
+  }
 }
 
 // Resolve savePath through fs.realpath (defeating symlink escape) and check
@@ -78,31 +96,16 @@ export async function checkPath(
 ): Promise<CheckResult> {
   const normalized = resolve(savePath);
 
-  let ancestor = normalized;
-  const trailing: string[] = [];
-  while (true) {
-    try {
-      await stat(ancestor);
-      break;
-    } catch {
-      const parent = dirname(ancestor);
-      if (parent === ancestor) {
-        // Reached filesystem root with no extant ancestor — fail closed.
-        return {
-          ok: false,
-          reason: `cannot resolve any extant ancestor for '${savePath}'`,
-        };
-      }
-      trailing.unshift(parse(ancestor).base);
-      ancestor = parent;
-    }
+  const walked = await walkToExtantAncestor(normalized);
+  if (walked === null) {
+    return {
+      ok: false,
+      reason: `cannot resolve any extant ancestor for '${savePath}'`,
+    };
   }
 
-  const resolvedAncestor = await realpath(ancestor);
-  const reattached =
-    trailing.length === 0
-      ? resolvedAncestor
-      : join(resolvedAncestor, ...trailing);
+  const resolvedAncestor = await realpath(walked.ancestor);
+  const reattached = join(resolvedAncestor, ...walked.trailing);
 
   // Win32 case-fold: filesystem is case-insensitive and fs.realpath doesn't
   // reliably canonicalize case, so compare both sides lowercased.
@@ -114,13 +117,14 @@ export async function checkPath(
 
   for (const root of roots) {
     const rel = relative(fold(root), foldedTarget);
-    if (rel === "") return { ok: true, resolved: reattached };
     if (!rel.startsWith("..") && !isAbsolute(rel)) {
       return { ok: true, resolved: reattached };
     }
   }
+
+  const rootsList = roots.map((r) => `'${r}'`).join(", ");
   return {
     ok: false,
-    reason: `'${reattached}' is outside the allowed write roots: [${roots.map((r) => `'${r}'`).join(", ")}]`,
+    reason: `'${reattached}' is outside the allowed write roots: [${rootsList}]`,
   };
 }
