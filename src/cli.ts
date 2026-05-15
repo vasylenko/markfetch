@@ -44,12 +44,12 @@ program
         url,
         savePath,
       });
-      if (savedTo !== undefined) {
-        // Confirmation message — the only stdout newline the CLI ever adds.
-        console.log(`Saved ${bytes} bytes to ${savedTo}`);
-      } else {
+      if (savedTo === undefined) {
         // Raw markdown body — no added newline, matches MCP content[0].text.
         process.stdout.write(markdown);
+      } else {
+        // Confirmation message — the only stdout newline the CLI ever adds.
+        console.log(`Saved ${bytes} bytes to ${savedTo}`);
       }
     } catch (err) {
       const { code, message } = classifyError(err);
