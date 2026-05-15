@@ -29,37 +29,11 @@ export type CheckResult =
   | { ok: true; resolved: string }
   | { ok: false; reason: string };
 
-// Per-entry validation for MARKFETCH_ALLOWED_WRITE_ROOTS. Each entry must be
-// absolute, resolvable via realpath, and a directory; any failure throws with
-// the entry quoted in the message so misconfiguration is easy to diagnose.
-async function resolveAllowedRoot(entry: string): Promise<string> {
-  if (!isAbsolute(entry)) {
-    throw new Error(
-      `Invalid ${ENV_VAR} entry ${JSON.stringify(entry)} — every entry must be an absolute path.`,
-    );
-  }
-  let resolvedEntry: string;
-  try {
-    resolvedEntry = await realpath(entry);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    throw new Error(
-      `Invalid ${ENV_VAR} entry ${JSON.stringify(entry)} — could not resolve: ${message}`,
-    );
-  }
-  const stats = await stat(resolvedEntry);
-  if (!stats.isDirectory()) {
-    throw new Error(
-      `Invalid ${ENV_VAR} entry ${JSON.stringify(entry)} — resolved to ${JSON.stringify(resolvedEntry)} which is not a directory.`,
-    );
-  }
-  return resolvedEntry;
-}
-
 // Defaults: realpath(os.tmpdir()) ∪ realpath(process.cwd()).
 // MARKFETCH_ALLOWED_WRITE_ROOTS REPLACES the defaults (no merge) — deliberate;
 // setting it is asserting a policy, so additive defaults would weaken it.
-// Callers who want tmpdir/cwd back must list them explicitly. Bad config
+// Callers who want tmpdir/cwd back must list them explicitly. Every entry
+// must be absolute, resolvable via realpath, and a directory. Bad config
 // throws at module init — same fail-fast contract as intEnv().
 export async function buildAllowedRoots(
   env: NodeJS.ProcessEnv,
@@ -68,19 +42,33 @@ export async function buildAllowedRoots(
   if (raw == null || raw === "") {
     return [await realpath(tmpdir()), await realpath(process.cwd())];
   }
-  // Sequential (not Promise.all) to preserve ordering and fail-fast-on-first-
-  // error semantics that the multi-entry test relies on.
   const resolved: string[] = [];
   for (const entry of raw.split(delimiter)) {
-    resolved.push(await resolveAllowedRoot(entry));
+    if (!isAbsolute(entry)) {
+      throw new Error(
+        `Invalid ${ENV_VAR} entry ${JSON.stringify(entry)} — every entry must be an absolute path.`,
+      );
+    }
+    let resolvedEntry: string;
+    try {
+      resolvedEntry = await realpath(entry);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `Invalid ${ENV_VAR} entry ${JSON.stringify(entry)} — could not resolve: ${message}`,
+      );
+    }
+    const stats = await stat(resolvedEntry);
+    if (!stats.isDirectory()) {
+      throw new Error(
+        `Invalid ${ENV_VAR} entry ${JSON.stringify(entry)} — resolved to ${JSON.stringify(resolvedEntry)} which is not a directory.`,
+      );
+    }
+    resolved.push(resolvedEntry);
   }
   return resolved;
 }
 
-// Walk up `start` until an extant ancestor is found, accumulating the
-// synthetic suffix that has to be reattached afterwards. Returns null when
-// the filesystem root is reached without finding anything that exists — the
-// caller fails closed in that case.
 async function walkToExtantAncestor(
   start: string,
 ): Promise<{ ancestor: string; trailing: string[] } | null> {
@@ -97,14 +85,6 @@ async function walkToExtantAncestor(
       ancestor = parent;
     }
   }
-}
-
-// True iff `target` is `root` itself or a descendant. Both inputs must be
-// pre-folded by the caller when running on a case-insensitive filesystem.
-function isContainedIn(target: string, root: string): boolean {
-  const rel = relative(root, target);
-  if (rel === "") return true;
-  return !rel.startsWith("..") && !isAbsolute(rel);
 }
 
 // Resolve savePath through fs.realpath (defeating symlink escape) and check
@@ -125,10 +105,7 @@ export async function checkPath(
   }
 
   const resolvedAncestor = await realpath(walked.ancestor);
-  const reattached =
-    walked.trailing.length === 0
-      ? resolvedAncestor
-      : join(resolvedAncestor, ...walked.trailing);
+  const reattached = join(resolvedAncestor, ...walked.trailing);
 
   // Win32 case-fold: filesystem is case-insensitive and fs.realpath doesn't
   // reliably canonicalize case, so compare both sides lowercased.
@@ -139,7 +116,8 @@ export async function checkPath(
   const foldedTarget = fold(reattached);
 
   for (const root of roots) {
-    if (isContainedIn(foldedTarget, fold(root))) {
+    const rel = relative(fold(root), foldedTarget);
+    if (!rel.startsWith("..") && !isAbsolute(rel)) {
       return { ok: true, resolved: reattached };
     }
   }
