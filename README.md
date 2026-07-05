@@ -88,6 +88,9 @@ npx -y markfetch https://example.com/article -o article.md
 
 # Pipe into another tool
 npx -y markfetch https://example.com/article | pandoc -o article.pdf
+
+# Raw mode: fetch JSON / APIs / page source verbatim (skips Readability + content-type gate)
+npx -y markfetch --raw https://api.github.com/repos/vasylenko/markfetch
 ```
 
 For repeat use, install once:
@@ -103,6 +106,7 @@ Flags:
 | Flag | Purpose |
 |---|---|
 | `-o, --output <path>` | Save markdown to a file (absolute or relative path). Default is stdout. |
+| `--raw` | Return the unprocessed response body — skips Readability and the content-type gate. Works for JSON, XML, plain text, or raw HTML source. |
 | `-V, --version` | Print version and exit. |
 | `-h, --help` | Print usage and exit. |
 
@@ -115,7 +119,7 @@ Errors carry one of eight deterministic codes:
 | `network_error` | DNS / TCP / TLS failure, or an unexpected internal error from the fetcher. |
 | `http_error` | Upstream returned a non-2xx status. |
 | `timeout` | Per-request budget `MARKFETCH_TIMEOUT_MS` exceeded. |
-| `unsupported_content_type` | Response was not `text/html` or `application/xhtml+xml`. |
+| `unsupported_content_type` | Response was not `text/html` or `application/xhtml+xml` (not raised with `--raw` / `raw`). |
 | `extraction_failed` | Readability returned no article content (typical for pure client-rendered SPAs). |
 | `too_large` | Response body or extracted markdown exceeded `MARKFETCH_MAX_BYTES`. |
 | `save_failed` | `savePath` was given but `writeFile` failed (parent directory missing, permission denied, etc.). |
