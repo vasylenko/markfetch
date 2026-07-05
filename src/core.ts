@@ -86,13 +86,14 @@ function deriveClientHints(ua: string): {
 
 const clientHints = deriveClientHints(config.userAgent);
 
-// Enable HTTP/2 via TLS ALPN. Modern bot-detection systems and CDNs consider
-// wire protocol alongside header fingerprint; HTTP/2 over TLS pairs cleanly
-// with a Chrome header set. Servers that don't advertise h2 in ALPN fall back
-// to HTTP/1.1 transparently during the TLS handshake — no manual retry needed.
-// Plain-HTTP connections (port 80) skip ALPN entirely and use HTTP/1.1,
-// accepting the protocol/fingerprint mismatch in that case.
-setGlobalDispatcher(new Agent({ allowH2: true }));
+// Force HTTP/1.1 (undici's default, pinned here so it isn't silently switched
+// to h2). HTTP/2 buys nothing for single-shot GETs — no multiplexing to exploit,
+// negligible header compression — and undici's h2 path hands a pre-connected
+// socket to node:http2, whose first-flight frame pattern some CDNs (Cloudflare,
+// observed on openai.com) score as a bot and answer with 403 even against a
+// valid Chrome header set. HTTP/1.1 sidesteps that, and every h2 server also
+// speaks it, so nothing is lost.
+setGlobalDispatcher(new Agent({ allowH2: false }));
 
 const TURNDOWN = new TurndownService({
   headingStyle: "atx",
