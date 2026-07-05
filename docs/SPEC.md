@@ -6,7 +6,7 @@ Text processing pipeline:
 
 ```
 URL
-  → undici.fetch       HTTP/2 via ALPN; full Chrome header set; Sec-CH-UA-* derived from UA
+  → undici.fetch       HTTP/1.1; full Chrome header set; Sec-CH-UA-* derived from UA
   → linkedom.parseHTML
   → @mozilla/readability
   → turndown + GFM     HTML → markdown
@@ -23,7 +23,7 @@ Errors throw `MarkfetchError` uniformly from core; adapters catch once. Codes: `
 
 - **Core throws, adapters translate.** Seven of the eight error codes surface from `core.ts` — five are thrown explicitly as `MarkfetchError`; `network_error`, `timeout`, and (sometimes) `http_error` are translated by `classifyError` from underlying-API errors (undici TypeErrors, AbortSignal timeouts). The eighth code, `save_forbidden`, is the exception — it's emitted by the MCP adapter before `fetchMarkdown` is invoked (see "Asymmetric write sandbox" below). New core codes need an `ErrorCode` union member + a throw site; adapters don't change.
 
-- **HTTP/2 + coherent Chrome fingerprint.** Wire protocol, headers, and UA must agree — a Chrome UA over HTTP/1.1 or without `Sec-CH-UA-*` is *more* suspicious than curl. `Sec-CH-UA-*` is derived from `MARKFETCH_USER_AGENT` at startup so override-coherence is mechanical.
+- **HTTP/1.1 + coherent Chrome header fingerprint.** Headers and UA must agree — a Chrome UA without `Sec-CH-UA-*` is a stronger bot signal than curl, so `Sec-CH-UA-*` is derived from `MARKFETCH_USER_AGENT` at startup and override-coherence is mechanical. Wire protocol is deliberately HTTP/1.1, not h2: undici's h2 path hands a pre-connected socket to `node:http2`, whose first-flight frame pattern some CDNs (Cloudflare, observed on `openai.com`) score as a bot and 403 — the identical request over h1.1 is let through. h2 also buys nothing for single-shot GETs, and every h2 server speaks h1.1, so nothing is lost. (Earlier revisions assumed Chrome-over-h1.1 was *more* suspicious than curl; the observed evidence is the opposite for these edges.)
 
 - **Single-channel MCP response.** `content[0].text` only. Several major MCP clients (Claude Code CLI, VS Code/Copilot) forward only `structuredContent` to the model and drop `content[]` when both are present — a single-channel response keeps the markdown reachable from those clients.
 
@@ -40,6 +40,7 @@ Errors throw `MarkfetchError` uniformly from core; adapters catch once. Codes: `
 - **Authentication.** `MARKFETCH_AUTH_HEADER` env var (simple), or Chrome-cookie import for sites where the user is already logged in (frictionless, platform-specific, security-sensitive). Trigger: first useful internal / paywalled doc.
 - **JS rendering fallback for SPAs.** Playwright / headless Chrome as a companion package (`markfetch-heavy`) so the lean package stays lean. Trigger: enough useful sites returning `extraction_failed`.
 - **CloudFlare `/markdown` fallback.** Gated by `CF_AUTH_TOKEN`; fall back when Readability fails. Trigger: extraction failure rate stays high after Readability tuning.
+- **Browser-grade TLS + HTTP/2 impersonation.** Stricter CDN tiers key on Node's TLS JA3/JA4 + UA mismatch and 403 every protocol — neither h1.1 nor `node:http2` beats them (both carry Node's OpenSSL fingerprint under a Chrome UA). A BoringSSL-based impersonating client (Apify's `impit`) delivers genuine HTTP/2 with a Chrome-matching TLS + h2 fingerprint; near-drop-in for `undici.fetch`, one native addon (~6 MB, prebuilt binaries). Trigger: target sites 403 the current h1.1 + Chrome-header approach.
 - **Cookie reuse across redirects within a single fetch.** Currently none. Trigger: a target serves content only after a session-cookie redirect.
 - **Proxy support** (`MARKFETCH_PROXY_URL`) and **`Accept-Language` control** (`MARKFETCH_ACCEPT_LANGUAGE`). Trigger: corporate proxy / locale-specific content.
 - **Single-binary distribution.** Bun's `build --compile`, Node SEA, or similar. Trigger: `npx` first-run latency feedback, or an offline / airgapped need.

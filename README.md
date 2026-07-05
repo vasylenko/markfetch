@@ -7,7 +7,7 @@
 [![node](https://img.shields.io/node/v/markfetch.svg?color=10b981)](https://nodejs.org/)
 [![license](https://img.shields.io/npm/l/markfetch.svg?color=10b981)](https://github.com/vasylenko/markfetch/blob/main/LICENSE)
 
-The built-in fetch tools that ship with AI coding agents return raw HTML, broken markdown, or `403` from Cloudflare more often than you'd like. `markfetch` sends **HTTP/2 with a coherent Chrome header set** so bot-detection systems see a real browser, then runs the response through the **same Reader View pipeline your browser uses** (Mozilla's Readability → turndown). The output is markdown indistinguishable from a human running "Save as Markdown" — on sites that would block a naive curl.
+The built-in fetch tools that ship with AI coding agents return raw HTML, broken markdown, or `403` from Cloudflare more often than you'd like. `markfetch` sends **a coherent Chrome header set** so bot-detection systems see a real browser, then runs the response through the **same Reader View pipeline your browser uses** (Mozilla's Readability → turndown). The output is markdown indistinguishable from a human running "Save as Markdown" — on sites that would block a naive curl.
 
 One command, two surfaces:
 
@@ -61,7 +61,7 @@ gemini mcp add -s user markfetch npx -y markfetch
 | CloudFlare `/markdown` | ✓ | ✓ | – | paid |
 | **`markfetch`** | **✓** | **✓** | **✓ (8 codes)** | **✓** |
 
-- **Real-browser HTTP/2 + Chrome fingerprint.** ALPN-negotiated h2, `User-Agent`, `Sec-CH-UA-*`, `Sec-Fetch-*`, `Accept-*`. A Chrome UA with no client hints is a *stronger* automation signal than curl — `markfetch` sends the full coherent set, derived from the UA at startup so an override stays internally consistent.
+- **Real-browser request fingerprint.** `User-Agent`, `Sec-CH-UA-*`, `Sec-Fetch-*`, `Accept-*` — a coherent Chrome header set. A Chrome UA with no client hints is a *stronger* automation signal than curl, so `markfetch` sends the full set, derived from the UA at startup so an override stays internally consistent. HTTP/1.1 over TLS: some CDNs fingerprint undici's HTTP/2 connection and 403 it, and h2 buys nothing for single-shot fetches.
 
 - **Reader-View-quality extraction.** [linkedom](https://github.com/WebReflection/linkedom) → [@mozilla/readability](https://github.com/mozilla/readability) → [turndown](https://github.com/mixmark-io/turndown) with GFM tables, strikethrough, and task lists. Code fences preserve `language-X` hints. Sphinx-style bare `<pre>` blocks render as code, not escaped prose. Intraword underscores stay un-escaped — no more `list\_tools`.
 
