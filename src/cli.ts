@@ -29,7 +29,11 @@ program
     "-o, --output <path>",
     "save markdown to file (absolute or relative path); default is stdout",
   )
-  .action(async (url: string, options: { output?: string }) => {
+  .option(
+    "--raw",
+    "return the unprocessed response body (skip Readability and the content-type gate)",
+  )
+  .action(async (url: string, options: { output?: string; raw?: boolean }) => {
     // CLI resolves relative output paths against cwd before calling core;
     // core requires an absolute path so the contract is unambiguous regardless
     // of which adapter invokes it. Tilde expansion is intentionally NOT done
@@ -43,9 +47,10 @@ program
       const { markdown, bytes, savedTo } = await fetchMarkdown({
         url,
         savePath,
+        raw: options.raw,
       });
       if (savedTo === undefined) {
-        // Raw markdown body — no added newline, matches MCP content[0].text.
+        // Verbatim output — no added newline, matches MCP content[0].text.
         process.stdout.write(markdown);
       } else {
         // Confirmation message — the only stdout newline the CLI ever adds.

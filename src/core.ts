@@ -229,7 +229,10 @@ function chromeHeaders(): Record<string, string> {
   };
 }
 
-async function fetchHtml(url: string): Promise<string> {
+// raw=true skips the HTML content-type gate so any body (JSON, plain text,
+// XML, source) is returned verbatim. Transport and the size caps are identical
+// either way; only the gate is conditional.
+async function fetchBody(url: string, raw: boolean): Promise<string> {
   const response = await fetch(url, {
     signal: AbortSignal.timeout(config.timeoutMs),
     headers: chromeHeaders(),
@@ -242,15 +245,17 @@ async function fetchHtml(url: string): Promise<string> {
     );
   }
 
-  const contentType = (response.headers.get("content-type") ?? "").toLowerCase();
-  if (
-    !contentType.startsWith("text/html") &&
-    !contentType.startsWith("application/xhtml+xml")
-  ) {
-    throw new MarkfetchError(
-      "unsupported_content_type",
-      `Content-Type: ${contentType || "(missing)"}`,
-    );
+  if (!raw) {
+    const contentType = (response.headers.get("content-type") ?? "").toLowerCase();
+    if (
+      !contentType.startsWith("text/html") &&
+      !contentType.startsWith("application/xhtml+xml")
+    ) {
+      throw new MarkfetchError(
+        "unsupported_content_type",
+        `Content-Type: ${contentType || "(missing)"}`,
+      );
+    }
   }
 
   const declaredLength = Number(response.headers.get("content-length") ?? 0);
@@ -258,12 +263,12 @@ async function fetchHtml(url: string): Promise<string> {
     throw enforceTooLarge("Content-Length", declaredLength);
   }
 
-  const html = await response.text();
-  if (Buffer.byteLength(html, "utf8") > config.maxBytes) {
-    throw enforceTooLarge("Body", Buffer.byteLength(html, "utf8"));
+  const body = await response.text();
+  if (Buffer.byteLength(body, "utf8") > config.maxBytes) {
+    throw enforceTooLarge("Body", Buffer.byteLength(body, "utf8"));
   }
 
-  return html;
+  return body;
 }
 
 function enforceTooLarge(stage: string, actual: number): MarkfetchError {
@@ -398,6 +403,10 @@ function convertToMarkdown(article: {
 // adapter's schema; savePath, if present, is an absolute path — adapters
 // resolve any relative-vs-absolute concerns before calling).
 //
+// With `raw`, the fetched body is returned verbatim — the content-type gate
+// and Readability/markdown conversion are skipped, so `unsupported_content_type`
+// and `extraction_failed` cannot arise in that mode. Size caps still apply.
+//
 // Errors are thrown uniformly as MarkfetchError. Adapters catch and translate:
 //   - mcp.ts catches → errorResult(code, message) → MCP {isError, content}
 //   - cli.ts catches → console.error("[code] message") → sets process.exitCode = 1
@@ -413,31 +422,40 @@ function convertToMarkdown(article: {
 export async function fetchMarkdown(input: {
   url: string;
   savePath?: string;
+  raw?: boolean;
 }): Promise<{ markdown: string; bytes: number; savedTo?: string }> {
-  const { url, savePath } = input;
-  const html = await fetchHtml(url);
-  const article = extractArticle(html, url);
-  if (!article) {
-    throw new MarkfetchError(
-      "extraction_failed",
-      "Readability returned no article content.",
-    );
+  const { url, savePath, raw = false } = input;
+  const body = await fetchBody(url, raw);
+  // raw returns the fetched body untouched — no Readability, no markdown
+  // conversion — so the content channel (and any savePath file) carry it
+  // verbatim. Otherwise extract the main article and convert to markdown.
+  let content: string;
+  if (raw) {
+    content = body;
+  } else {
+    const article = extractArticle(body, url);
+    if (!article) {
+      throw new MarkfetchError(
+        "extraction_failed",
+        "Readability returned no article content.",
+      );
+    }
+    content = convertToMarkdown(article);
   }
-  const markdown = convertToMarkdown(article);
-  const bytes = Buffer.byteLength(markdown, "utf8");
+  const bytes = Buffer.byteLength(content, "utf8");
   if (bytes > config.maxBytes) {
     throw new MarkfetchError(
       "too_large",
-      `Markdown ${bytes} bytes > MARKFETCH_MAX_BYTES (${config.maxBytes})`,
+      `Output ${bytes} bytes > MARKFETCH_MAX_BYTES (${config.maxBytes})`,
     );
   }
-  // The file at savePath is only ever the markdown of the URL. Fetch /
-  // extraction / size-cap failures all throw above and never reach this
-  // branch, so the file is never written for them. save_failed is its own
-  // phase, handled here.
+  // The file at savePath is only ever the fetched output (extracted markdown,
+  // or the raw body when `raw` is set). Fetch / extraction / size-cap failures
+  // all throw above and never reach this branch, so the file is never written
+  // for them. save_failed is its own phase, handled here.
   if (savePath !== undefined) {
     try {
-      await writeFile(savePath, markdown, "utf8");
+      await writeFile(savePath, content, "utf8");
     } catch (err) {
       // Node's fs errors prefix the message with the errno already
       // (e.g. "ENOENT: no such file or directory, open '/path'"), so
@@ -449,7 +467,7 @@ export async function fetchMarkdown(input: {
         e.message || (e.code ?? "unknown error"),
       );
     }
-    return { markdown, bytes, savedTo: savePath };
+    return { markdown: content, bytes, savedTo: savePath };
   }
-  return { markdown, bytes };
+  return { markdown: content, bytes };
 }
