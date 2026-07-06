@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - 403 from CDNs that fingerprint the HTTP/2 connection (Cloudflare, observed on `openai.com/products/release-notes/`): a valid Chrome header set was rejected over h2 but let through over HTTP/1.1. markfetch now defaults to HTTP/1.1.
+- Empty-heading pruning truncated headings containing an inline `#` (`## Step 1 # download` became `# download`).
 
 ## [0.6.0] - 2026-05-14
 
