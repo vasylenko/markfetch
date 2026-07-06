@@ -139,8 +139,11 @@ TURNDOWN.escape = (s: string): string =>
 TURNDOWN.addRule("barePre", {
   filter: (node) => node.nodeName === "PRE" && !node.querySelector("code"),
   replacement: (_content, node) => {
-    const text = (node.textContent ?? "").replace(/\n+$/, "");
-    return "\n\n```\n" + text + "\n```\n\n";
+    // index-based trailing-newline trim — /\n+$/ backtracks super-linearly
+    const text = node.textContent ?? "";
+    let end = text.length;
+    while (end > 0 && text[end - 1] === "\n") end--;
+    return "\n\n```\n" + text.slice(0, end) + "\n```\n\n";
   },
 });
 
@@ -383,15 +386,17 @@ function convertToMarkdown(article: {
   // an interactive widget (MDN browser-compat tables, MCP spec diagrams,
   // etc.) but leaves the orphan heading. Iterate until stable so a parent
   // section that becomes empty after its last child heading is pruned also
-  // gets removed.
+  // gets removed. The blank span is matched line-by-line ([ \t]*\n), not \s*,
+  // which would backtrack super-linearly; requiring \n also stops a mid-line
+  // "#" from being read as the next heading.
   let prev: string;
   do {
     prev = result;
-    result = result.replaceAll(/^(#{1,6}) [^\n]+\s*(?=#{1,6} )/gm, "");
+    result = result.replaceAll(/^#{1,6} [^\n]+\n(?:[ \t]*\n)*[ \t]*(?=#{1,6} )/gm, "");
   } while (result !== prev);
   // The lookahead-based iteration above can't catch a trailing empty
   // heading at EOF (no following heading to anchor on). One-shot pass.
-  result = result.replace(/(?:^|\n)#{1,6} [^\n]+\s*$/, "");
+  result = result.replace(/(?:^|\n)#{1,6} [^\n]+(?:\n[ \t]*)*$/, "");
   return result;
 }
 
