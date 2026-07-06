@@ -65,9 +65,9 @@ gemini mcp add -s user markfetch npx -y markfetch
 
 - **Reader-View-quality extraction.** [linkedom](https://github.com/WebReflection/linkedom) → [@mozilla/readability](https://github.com/mozilla/readability) → [turndown](https://github.com/mixmark-io/turndown) with GFM tables, strikethrough, and task lists. Code fences preserve `language-X` hints. Sphinx-style bare `<pre>` blocks render as code, not escaped prose. Intraword underscores stay un-escaped — no more `list\_tools`.
 
-- **One tool, one shape (MCP).** `fetch_markdown(url, savePath?)` returns markdown in `content[0].text`. No `structuredContent`, no frontmatter, no metadata fields. Several major MCP clients (Claude Code CLI, VS Code/Copilot) forward only `structuredContent` to the model and drop `content[]` when both are present — `markfetch` deliberately stays on the channel your LLM can actually read.
+- **One tool, one shape (MCP).** `fetch_markdown(url, savePath?, raw?)` returns markdown in `content[0].text`. No `structuredContent`, no frontmatter, no metadata fields. Several major MCP clients (Claude Code CLI, VS Code/Copilot) forward only `structuredContent` to the model and drop `content[]` when both are present — `markfetch` deliberately stays on the channel your LLM can actually read.
 
-- **`savePath` / `-o` escape valve.** Pass an absolute path (MCP `savePath`) or `-o <path>` (CLI) and the markdown lands on disk instead of the response channel. Use it when your client's inline tool-result cap would truncate large responses, or to redirect output from a shell pipeline. The file is only ever the markdown of the URL — fetch errors return a `[code]` string and never touch the disk.
+- **`savePath` / `-o` escape valve.** Pass an absolute path (MCP `savePath`) or `-o <path>` (CLI) and the output lands on disk instead of the response channel. Use it when your client's inline tool-result cap would truncate large responses, or to redirect output from a shell pipeline. The file is only ever the fetched output (extracted markdown, or the raw body with `--raw`) — fetch errors return a `[code]` string and never touch the disk.
 
 - **Whole document or honest failure.** No pagination, no truncation. If the document doesn't fit in `MARKFETCH_MAX_BYTES`, you get `too_large` — never a half-truth.
 
@@ -105,8 +105,8 @@ Flags:
 
 | Flag | Purpose |
 |---|---|
-| `-o, --output <path>` | Save markdown to a file (absolute or relative path). Default is stdout. |
-| `--raw` | Return the unprocessed response body — skips Readability and the content-type gate. Works for JSON, XML, plain text, or raw HTML source. |
+| `-o, --output <path>` | Save the output to a file (absolute or relative path). Default is stdout. |
+| `--raw` | Return the unprocessed response body as UTF-8 text — skips Readability and the content-type gate. For JSON, XML, plain text, or page source (binary is not byte-preserved). |
 | `-V, --version` | Print version and exit. |
 | `-h, --help` | Print usage and exit. |
 
@@ -120,7 +120,7 @@ Errors carry one of eight deterministic codes:
 | `http_error` | Upstream returned a non-2xx status. |
 | `timeout` | Per-request budget `MARKFETCH_TIMEOUT_MS` exceeded. |
 | `unsupported_content_type` | Response was not `text/html` or `application/xhtml+xml` (not raised with `--raw` / `raw`). |
-| `extraction_failed` | Readability returned no article content (typical for pure client-rendered SPAs). |
+| `extraction_failed` | Readability returned no article content (typical for pure client-rendered SPAs). Not raised with `--raw` / `raw`. |
 | `too_large` | Response body or extracted markdown exceeded `MARKFETCH_MAX_BYTES`. |
 | `save_failed` | `savePath` was given but `writeFile` failed (parent directory missing, permission denied, etc.). |
 | `save_forbidden` | `savePath` resolves outside the allowed write roots — see [Write sandbox](#write-sandbox). MCP-only; the CLI has no sandbox. |

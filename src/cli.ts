@@ -27,7 +27,7 @@ program
   .argument("<url>", "absolute http(s) URL to fetch")
   .option(
     "-o, --output <path>",
-    "save markdown to file (absolute or relative path); default is stdout",
+    "save output to a file (absolute or relative path); default is stdout",
   )
   .option(
     "--raw",
