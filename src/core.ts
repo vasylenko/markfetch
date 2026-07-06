@@ -86,11 +86,7 @@ function deriveClientHints(ua: string): {
 
 const clientHints = deriveClientHints(config.userAgent);
 
-// Force HTTP/1.1 — undici v8 defaults to allowH2:true, so deleting this line
-// re-enables h2. undici's h2 path hands a pre-connected socket to node:http2,
-// whose first-flight frame pattern some CDNs (Cloudflare, observed on openai.com)
-// score as a bot and 403 even against a valid Chrome header set. HTTP/1.1 passes
-// those edges, every h2 server speaks it, and h2 buys nothing for single-shot GETs.
+// HTTP/1.1 because undici's h2 handshake trips CDN bot-scoring (Cloudflare 403s Chrome headers over h2 but not h1.1).
 setGlobalDispatcher(new Agent({ allowH2: false }));
 
 const TURNDOWN = new TurndownService({
@@ -230,8 +226,7 @@ function chromeHeaders(): Record<string, string> {
   };
 }
 
-// raw=true skips the HTML content-type gate so any body (JSON, plain text,
-// XML, source) is returned verbatim. Size caps apply either way.
+// raw = skip the HTML content-type gate and pass any body through verbatim.
 async function fetchBody(url: string, raw: boolean): Promise<string> {
   const response = await fetch(url, {
     signal: AbortSignal.timeout(config.timeoutMs),
@@ -386,9 +381,8 @@ function convertToMarkdown(article: {
   // an interactive widget (MDN browser-compat tables, MCP spec diagrams,
   // etc.) but leaves the orphan heading. Iterate until stable so a parent
   // section that becomes empty after its last child heading is pruned also
-  // gets removed. The blank span is matched line-by-line ([ \t]*\n), not \s*,
-  // which would backtrack super-linearly; requiring \n also stops a mid-line
-  // "#" from being read as the next heading.
+  // gets removed. Blank spans match line-by-line — \s* backtracks super-linearly
+  // and lets a mid-line "#" pass as the next heading.
   let prev: string;
   do {
     prev = result;
@@ -400,8 +394,7 @@ function convertToMarkdown(article: {
   return result;
 }
 
-// Throws extraction_failed when Readability finds nothing (e.g. pure
-// client-rendered SPAs).
+// Throws extraction_failed when Readability finds nothing (pure client-rendered SPAs).
 function extractMarkdown(html: string, url: string): string {
   const article = extractArticle(html, url);
   if (!article) {
@@ -419,9 +412,7 @@ function extractMarkdown(html: string, url: string): string {
 // adapter's schema; savePath, if present, is an absolute path — adapters
 // resolve any relative-vs-absolute concerns before calling).
 //
-// With `raw`, the body is returned verbatim (no content-type gate, no Readability
-// conversion), so `unsupported_content_type` and `extraction_failed` cannot arise.
-// Size caps still apply.
+// With raw, unsupported_content_type and extraction_failed cannot arise.
 //
 // Errors are thrown uniformly as MarkfetchError. Adapters catch and translate:
 //   - mcp.ts catches → errorResult(code, message) → MCP {isError, content}
@@ -445,10 +436,8 @@ export async function fetchMarkdown(input: {
   const content = raw ? body : extractMarkdown(body, url);
   const bytes = Buffer.byteLength(content, "utf8");
   if (bytes > config.maxBytes) throw enforceTooLarge("Output", bytes);
-  // The file at savePath is only ever the fetched output (extracted markdown,
-  // or the raw body when `raw` is set). Fetch / extraction / size-cap failures
-  // all throw above and never reach this branch, so the file is never written
-  // for them. save_failed is its own phase, handled here.
+  // The file only ever holds the fetched output: failures throw above and
+  // never reach this branch. save_failed is its own phase, handled here.
   if (savePath !== undefined) {
     try {
       await writeFile(savePath, content, "utf8");
