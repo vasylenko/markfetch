@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--raw` (CLI) / `raw` (MCP): return the unprocessed response body, skipping Readability extraction and the HTML content-type gate. Non-HTML responses (JSON, XML, plain text, source) come back verbatim instead of `unsupported_content_type`; the `MARKFETCH_MAX_BYTES` cap still applies.
 
 ### Fixed
-- 403 from CDNs that fingerprint the HTTP/2 connection (Cloudflare, observed on `openai.com/products/release-notes/`): a valid Chrome header set was rejected over h2 but let through over HTTP/1.1. markfetch now defaults to HTTP/1.1. undici's h2 path hands a pre-connected socket to `node:http2`, whose first-flight frame pattern trips that scoring; h2 also offers nothing for single-shot GETs and every h2 server speaks HTTP/1.1, so nothing is lost.
+- 403 from CDNs that fingerprint the HTTP/2 connection (Cloudflare, observed on `openai.com/products/release-notes/`): a valid Chrome header set was rejected over h2 but let through over HTTP/1.1. markfetch now defaults to HTTP/1.1.
 
 ## [0.6.0] - 2026-05-14
 
