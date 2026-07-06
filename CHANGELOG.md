@@ -8,10 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- `--raw` (CLI) / `raw` (MCP): return the unprocessed response body, skipping Readability extraction and the HTML content-type gate. Non-HTML responses (JSON, XML, plain text, source) come back verbatim instead of `unsupported_content_type`; the `MARKFETCH_MAX_BYTES` cap still applies.
+- `--raw` (CLI) / `raw` (MCP): return the unprocessed body verbatim — no Readability, no content-type gate; `MARKFETCH_MAX_BYTES` still applies.
 
 ### Fixed
-- 403 from CDNs that fingerprint the HTTP/2 connection (Cloudflare, observed on `openai.com/products/release-notes/`): a valid Chrome header set was rejected over h2 but let through over HTTP/1.1. markfetch now defaults to HTTP/1.1.
+- Cloudflare-class CDNs 403 valid Chrome headers over HTTP/2 but pass them over HTTP/1.1 — markfetch now defaults to HTTP/1.1.
 - Empty-heading pruning truncated headings containing an inline `#` (`## Step 1 # download` became `# download`).
 
 ## [0.6.0] - 2026-05-14

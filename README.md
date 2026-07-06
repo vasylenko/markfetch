@@ -61,7 +61,7 @@ gemini mcp add -s user markfetch npx -y markfetch
 | CloudFlare `/markdown` | ✓ | ✓ | – | paid |
 | **`markfetch`** | **✓** | **✓** | **✓ (8 codes)** | **✓** |
 
-- **Real-browser request fingerprint.** `User-Agent`, `Sec-CH-UA-*`, `Sec-Fetch-*`, `Accept-*` — a coherent Chrome header set. A Chrome UA with no client hints is a *stronger* automation signal than curl, so `markfetch` sends the full set, derived from the UA at startup so an override stays internally consistent. HTTP/1.1 over TLS: some CDNs fingerprint undici's HTTP/2 connection and 403 it, and h2 buys nothing for single-shot fetches.
+- **Real-browser request fingerprint.** `User-Agent`, `Sec-CH-UA-*`, `Sec-Fetch-*`, `Accept-*` — a coherent Chrome header set. A Chrome UA with no client hints is a *stronger* automation signal than curl, so `markfetch` sends the full set, derived from the UA at startup so an override stays internally consistent. HTTP/1.1 over TLS: some CDNs fingerprint undici's HTTP/2 connection and 403 it.
 
 - **Reader-View-quality extraction.** [linkedom](https://github.com/WebReflection/linkedom) → [@mozilla/readability](https://github.com/mozilla/readability) → [turndown](https://github.com/mixmark-io/turndown) with GFM tables, strikethrough, and task lists. Code fences preserve `language-X` hints. Sphinx-style bare `<pre>` blocks render as code, not escaped prose. Intraword underscores stay un-escaped — no more `list\_tools`.
 
@@ -89,7 +89,7 @@ npx -y markfetch https://example.com/article -o article.md
 # Pipe into another tool
 npx -y markfetch https://example.com/article | pandoc -o article.pdf
 
-# Raw mode: fetch JSON / APIs / page source verbatim (skips Readability + content-type gate)
+# Fetch JSON / APIs / page source verbatim
 npx -y markfetch --raw https://api.github.com/repos/vasylenko/markfetch
 ```
 
