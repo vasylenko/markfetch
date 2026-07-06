@@ -86,13 +86,8 @@ function deriveClientHints(ua: string): {
 
 const clientHints = deriveClientHints(config.userAgent);
 
-// Enable HTTP/2 via TLS ALPN. Modern bot-detection systems and CDNs consider
-// wire protocol alongside header fingerprint; HTTP/2 over TLS pairs cleanly
-// with a Chrome header set. Servers that don't advertise h2 in ALPN fall back
-// to HTTP/1.1 transparently during the TLS handshake — no manual retry needed.
-// Plain-HTTP connections (port 80) skip ALPN entirely and use HTTP/1.1,
-// accepting the protocol/fingerprint mismatch in that case.
-setGlobalDispatcher(new Agent({ allowH2: true }));
+// HTTP/1.1 because undici's h2 handshake trips CDN bot-scoring (Cloudflare 403s Chrome headers over h2 but not h1.1).
+setGlobalDispatcher(new Agent({ allowH2: false }));
 
 const TURNDOWN = new TurndownService({
   headingStyle: "atx",
@@ -140,8 +135,11 @@ TURNDOWN.escape = (s: string): string =>
 TURNDOWN.addRule("barePre", {
   filter: (node) => node.nodeName === "PRE" && !node.querySelector("code"),
   replacement: (_content, node) => {
-    const text = (node.textContent ?? "").replace(/\n+$/, "");
-    return "\n\n```\n" + text + "\n```\n\n";
+    // index-based trailing-newline trim — /\n+$/ backtracks super-linearly
+    const text = node.textContent ?? "";
+    let end = text.length;
+    while (end > 0 && text[end - 1] === "\n") end--;
+    return "\n\n```\n" + text.slice(0, end) + "\n```\n\n";
   },
 });
 
@@ -228,7 +226,8 @@ function chromeHeaders(): Record<string, string> {
   };
 }
 
-async function fetchHtml(url: string): Promise<string> {
+// raw = skip the HTML content-type gate and pass any body through verbatim.
+async function fetchBody(url: string, raw: boolean): Promise<string> {
   const response = await fetch(url, {
     signal: AbortSignal.timeout(config.timeoutMs),
     headers: chromeHeaders(),
@@ -241,15 +240,17 @@ async function fetchHtml(url: string): Promise<string> {
     );
   }
 
-  const contentType = (response.headers.get("content-type") ?? "").toLowerCase();
-  if (
-    !contentType.startsWith("text/html") &&
-    !contentType.startsWith("application/xhtml+xml")
-  ) {
-    throw new MarkfetchError(
-      "unsupported_content_type",
-      `Content-Type: ${contentType || "(missing)"}`,
-    );
+  if (!raw) {
+    const contentType = (response.headers.get("content-type") ?? "").toLowerCase();
+    if (
+      !contentType.startsWith("text/html") &&
+      !contentType.startsWith("application/xhtml+xml")
+    ) {
+      throw new MarkfetchError(
+        "unsupported_content_type",
+        `Content-Type: ${contentType || "(missing)"}`,
+      );
+    }
   }
 
   const declaredLength = Number(response.headers.get("content-length") ?? 0);
@@ -257,12 +258,13 @@ async function fetchHtml(url: string): Promise<string> {
     throw enforceTooLarge("Content-Length", declaredLength);
   }
 
-  const html = await response.text();
-  if (Buffer.byteLength(html, "utf8") > config.maxBytes) {
-    throw enforceTooLarge("Body", Buffer.byteLength(html, "utf8"));
+  const body = await response.text();
+  const size = Buffer.byteLength(body, "utf8");
+  if (size > config.maxBytes) {
+    throw enforceTooLarge("Body", size);
   }
 
-  return html;
+  return body;
 }
 
 function enforceTooLarge(stage: string, actual: number): MarkfetchError {
@@ -379,16 +381,29 @@ function convertToMarkdown(article: {
   // an interactive widget (MDN browser-compat tables, MCP spec diagrams,
   // etc.) but leaves the orphan heading. Iterate until stable so a parent
   // section that becomes empty after its last child heading is pruned also
-  // gets removed.
+  // gets removed. Blank spans match line-by-line — \s* backtracks super-linearly
+  // and lets a mid-line "#" pass as the next heading.
   let prev: string;
   do {
     prev = result;
-    result = result.replaceAll(/^(#{1,6}) [^\n]+\s*(?=#{1,6} )/gm, "");
+    result = result.replaceAll(/^#{1,6} [^\n]+\n(?:[ \t]*\n)*[ \t]*(?=#{1,6} )/gm, "");
   } while (result !== prev);
   // The lookahead-based iteration above can't catch a trailing empty
   // heading at EOF (no following heading to anchor on). One-shot pass.
-  result = result.replace(/(?:^|\n)#{1,6} [^\n]+\s*$/, "");
+  result = result.replace(/(?:^|\n)#{1,6} [^\n]+(?:\n[ \t]*)*$/, "");
   return result;
+}
+
+// Throws extraction_failed when Readability finds nothing (pure client-rendered SPAs).
+function extractMarkdown(html: string, url: string): string {
+  const article = extractArticle(html, url);
+  if (!article) {
+    throw new MarkfetchError(
+      "extraction_failed",
+      "Readability returned no article content.",
+    );
+  }
+  return convertToMarkdown(article);
 }
 
 // --- Unified entry point ---
@@ -396,6 +411,8 @@ function convertToMarkdown(article: {
 // Adapters call this with already-validated inputs (URL syntax checked by the
 // adapter's schema; savePath, if present, is an absolute path — adapters
 // resolve any relative-vs-absolute concerns before calling).
+//
+// With raw, unsupported_content_type and extraction_failed cannot arise.
 //
 // Errors are thrown uniformly as MarkfetchError. Adapters catch and translate:
 //   - mcp.ts catches → errorResult(code, message) → MCP {isError, content}
@@ -412,31 +429,18 @@ function convertToMarkdown(article: {
 export async function fetchMarkdown(input: {
   url: string;
   savePath?: string;
+  raw?: boolean;
 }): Promise<{ markdown: string; bytes: number; savedTo?: string }> {
-  const { url, savePath } = input;
-  const html = await fetchHtml(url);
-  const article = extractArticle(html, url);
-  if (!article) {
-    throw new MarkfetchError(
-      "extraction_failed",
-      "Readability returned no article content.",
-    );
-  }
-  const markdown = convertToMarkdown(article);
-  const bytes = Buffer.byteLength(markdown, "utf8");
-  if (bytes > config.maxBytes) {
-    throw new MarkfetchError(
-      "too_large",
-      `Markdown ${bytes} bytes > MARKFETCH_MAX_BYTES (${config.maxBytes})`,
-    );
-  }
-  // The file at savePath is only ever the markdown of the URL. Fetch /
-  // extraction / size-cap failures all throw above and never reach this
-  // branch, so the file is never written for them. save_failed is its own
-  // phase, handled here.
+  const { url, savePath, raw = false } = input;
+  const body = await fetchBody(url, raw);
+  const content = raw ? body : extractMarkdown(body, url);
+  const bytes = Buffer.byteLength(content, "utf8");
+  if (bytes > config.maxBytes) throw enforceTooLarge("Output", bytes);
+  // The file only ever holds the fetched output: failures throw above and
+  // never reach this branch. save_failed is its own phase, handled here.
   if (savePath !== undefined) {
     try {
-      await writeFile(savePath, markdown, "utf8");
+      await writeFile(savePath, content, "utf8");
     } catch (err) {
       // Node's fs errors prefix the message with the errno already
       // (e.g. "ENOENT: no such file or directory, open '/path'"), so
@@ -448,7 +452,7 @@ export async function fetchMarkdown(input: {
         e.message || (e.code ?? "unknown error"),
       );
     }
-    return { markdown, bytes, savedTo: savePath };
+    return { markdown: content, bytes, savedTo: savePath };
   }
-  return { markdown, bytes };
+  return { markdown: content, bytes };
 }

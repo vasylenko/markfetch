@@ -76,6 +76,23 @@ test("CLI: happy path → markdown to stdout, stderr empty, exit 0", async () =>
   }
 });
 
+test("CLI: --raw returns the unprocessed body verbatim to stdout", async () => {
+  const RAW = '{"hello":"world","n":42}';
+  const mock = await startMock((_req, res) => {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(RAW);
+  });
+  try {
+    const { code, stdout, stderr } = await runCli([mock.url, "--raw"]);
+    assert.equal(code, 0, `stderr was: ${stderr}`);
+    assert.equal(stderr, "");
+    // Byte-for-byte: content-type gate and Readability skipped, no added newline.
+    assert.equal(stdout, RAW);
+  } finally {
+    await mock.close();
+  }
+});
+
 test("CLI: -o <absolute-path> writes file, prints confirmation to stdout", async () => {
   const mock = await startMock((_req, res) => {
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });

@@ -7,7 +7,7 @@
 [![node](https://img.shields.io/node/v/markfetch.svg?color=10b981)](https://nodejs.org/)
 [![license](https://img.shields.io/npm/l/markfetch.svg?color=10b981)](https://github.com/vasylenko/markfetch/blob/main/LICENSE)
 
-The built-in fetch tools that ship with AI coding agents return raw HTML, broken markdown, or `403` from Cloudflare more often than you'd like. `markfetch` sends **HTTP/2 with a coherent Chrome header set** so bot-detection systems see a real browser, then runs the response through the **same Reader View pipeline your browser uses** (Mozilla's Readability → turndown). The output is markdown indistinguishable from a human running "Save as Markdown" — on sites that would block a naive curl.
+The built-in fetch tools that ship with AI coding agents return raw HTML, broken markdown, or `403` from Cloudflare more often than you'd like. `markfetch` sends **a coherent Chrome header set** so bot-detection systems see a real browser, then runs the response through the **same Reader View pipeline your browser uses** (Mozilla's Readability → turndown). The output is markdown indistinguishable from a human running "Save as Markdown" — on sites that would block a naive curl.
 
 One command, two surfaces:
 
@@ -61,13 +61,13 @@ gemini mcp add -s user markfetch npx -y markfetch
 | CloudFlare `/markdown` | ✓ | ✓ | – | paid |
 | **`markfetch`** | **✓** | **✓** | **✓ (8 codes)** | **✓** |
 
-- **Real-browser HTTP/2 + Chrome fingerprint.** ALPN-negotiated h2, `User-Agent`, `Sec-CH-UA-*`, `Sec-Fetch-*`, `Accept-*`. A Chrome UA with no client hints is a *stronger* automation signal than curl — `markfetch` sends the full coherent set, derived from the UA at startup so an override stays internally consistent.
+- **Real-browser request fingerprint.** `User-Agent`, `Sec-CH-UA-*`, `Sec-Fetch-*`, `Accept-*` — a coherent Chrome header set. A Chrome UA with no client hints is a *stronger* automation signal than curl, so `markfetch` sends the full set, derived from the UA at startup so an override stays internally consistent. HTTP/1.1 over TLS: some CDNs fingerprint undici's HTTP/2 connection and 403 it.
 
 - **Reader-View-quality extraction.** [linkedom](https://github.com/WebReflection/linkedom) → [@mozilla/readability](https://github.com/mozilla/readability) → [turndown](https://github.com/mixmark-io/turndown) with GFM tables, strikethrough, and task lists. Code fences preserve `language-X` hints. Sphinx-style bare `<pre>` blocks render as code, not escaped prose. Intraword underscores stay un-escaped — no more `list\_tools`.
 
-- **One tool, one shape (MCP).** `fetch_markdown(url, savePath?)` returns markdown in `content[0].text`. No `structuredContent`, no frontmatter, no metadata fields. Several major MCP clients (Claude Code CLI, VS Code/Copilot) forward only `structuredContent` to the model and drop `content[]` when both are present — `markfetch` deliberately stays on the channel your LLM can actually read.
+- **One tool, one shape (MCP).** `fetch_markdown(url, savePath?, raw?)` returns markdown in `content[0].text`. No `structuredContent`, no frontmatter, no metadata fields. Several major MCP clients (Claude Code CLI, VS Code/Copilot) forward only `structuredContent` to the model and drop `content[]` when both are present — `markfetch` deliberately stays on the channel your LLM can actually read.
 
-- **`savePath` / `-o` escape valve.** Pass an absolute path (MCP `savePath`) or `-o <path>` (CLI) and the markdown lands on disk instead of the response channel. Use it when your client's inline tool-result cap would truncate large responses, or to redirect output from a shell pipeline. The file is only ever the markdown of the URL — fetch errors return a `[code]` string and never touch the disk.
+- **`savePath` / `-o` escape valve.** Pass an absolute path (MCP `savePath`) or `-o <path>` (CLI) and the output lands on disk instead of the response channel. Use it when your client's inline tool-result cap would truncate large responses, or to redirect output from a shell pipeline. The file is only ever the fetched output (extracted markdown, or the raw body with `--raw`) — fetch errors return a `[code]` string and never touch the disk.
 
 - **Whole document or honest failure.** No pagination, no truncation. If the document doesn't fit in `MARKFETCH_MAX_BYTES`, you get `too_large` — never a half-truth.
 
@@ -88,6 +88,9 @@ npx -y markfetch https://example.com/article -o article.md
 
 # Pipe into another tool
 npx -y markfetch https://example.com/article | pandoc -o article.pdf
+
+# Fetch JSON / APIs / page source verbatim
+npx -y markfetch --raw https://api.github.com/repos/vasylenko/markfetch
 ```
 
 For repeat use, install once:
@@ -102,7 +105,8 @@ Flags:
 
 | Flag | Purpose |
 |---|---|
-| `-o, --output <path>` | Save markdown to a file (absolute or relative path). Default is stdout. |
+| `-o, --output <path>` | Save the output to a file (absolute or relative path). Default is stdout. |
+| `--raw` | Return the unprocessed response body as UTF-8 text — skips Readability and the content-type gate. For JSON, XML, plain text, or page source (binary is not byte-preserved). |
 | `-V, --version` | Print version and exit. |
 | `-h, --help` | Print usage and exit. |
 
@@ -115,8 +119,8 @@ Errors carry one of eight deterministic codes:
 | `network_error` | DNS / TCP / TLS failure, or an unexpected internal error from the fetcher. |
 | `http_error` | Upstream returned a non-2xx status. |
 | `timeout` | Per-request budget `MARKFETCH_TIMEOUT_MS` exceeded. |
-| `unsupported_content_type` | Response was not `text/html` or `application/xhtml+xml`. |
-| `extraction_failed` | Readability returned no article content (typical for pure client-rendered SPAs). |
+| `unsupported_content_type` | Response was not `text/html` or `application/xhtml+xml` (not raised with `--raw` / `raw`). |
+| `extraction_failed` | Readability returned no article content (typical for pure client-rendered SPAs). Not raised with `--raw` / `raw`. |
 | `too_large` | Response body or extracted markdown exceeded `MARKFETCH_MAX_BYTES`. |
 | `save_failed` | `savePath` was given but `writeFile` failed (parent directory missing, permission denied, etc.). |
 | `save_forbidden` | `savePath` resolves outside the allowed write roots — see [Write sandbox](#write-sandbox). MCP-only; the CLI has no sandbox. |

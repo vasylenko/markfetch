@@ -33,7 +33,7 @@ server.registerTool(
   "fetch_markdown",
   {
     description:
-      "Fetch a single public HTTP/S URL and return its main article content as clean markdown. Best for articles, documentation, blog posts, news, and reference pages. Non-HTML responses return `unsupported_content_type`. Pure client-rendered SPAs with no extractable static HTML return `extraction_failed`; SPAs that ship server-rendered or SEO-prerendered HTML will extract whatever static content they expose. Also supports saving the markdown to a file, e.g., to bypass client tool-result size limits or to reuse later. Saved files must land inside the allowed write roots (defaults: system temp dir and the server's working directory; configurable via `MARKFETCH_ALLOWED_WRITE_ROOTS`); paths outside return `save_forbidden`.",
+      "Fetch a public HTTP/S URL and return its main article content as clean markdown. Best for articles, documentation, blog posts, and reference pages. Non-HTML responses return `unsupported_content_type` unless `raw` is set; pure client-rendered SPAs return `extraction_failed`. Set `savePath` to write the output to a file instead of returning it inline.",
     inputSchema: {
       url: z
         .string()
@@ -46,11 +46,17 @@ server.registerTool(
         .refine(isAbsolute, "savePath must be an absolute filesystem path")
         .optional()
         .describe(
-          "Optional. When provided, the fetched markdown is written to this absolute filesystem path and the response becomes a small confirmation. Use this when the markdown might exceed your client's tool-result inline cap. Must be an absolute path on the host platform (e.g., `/foo/bar.md` on POSIX; `C:\\foo\\bar.md` or `\\\\server\\share\\bar.md` on Windows); relative paths and tilde paths (`~/...`) are rejected by the schema. Writes are confined to an allow-listed sandbox — defaults are the system temp dir (`os.tmpdir()`) and the server's working directory; operators can override with `MARKFETCH_ALLOWED_WRITE_ROOTS` (path-delimiter-separated). A `savePath` outside the allowed roots returns `save_forbidden` and no file is created. Existing files are overwritten; the parent directory must exist (caller's responsibility). The file is written only on fetch success — fetch / extraction / size-cap errors return a `[code]` string and never touch the file.",
+          "Absolute path to write the output to instead of returning it inline; the response becomes a short confirmation. Use when the output might exceed your client's tool-result cap. Relative and `~` paths are rejected. Writes are sandboxed to allowed roots (defaults: system temp dir and the server's working directory; override with `MARKFETCH_ALLOWED_WRITE_ROOTS`) — paths outside return `save_forbidden`. Existing files are overwritten; the parent directory must exist. Fetch errors never touch the file.",
+        ),
+      raw: z
+        .boolean()
+        .optional()
+        .describe(
+          "Return the response body verbatim as UTF-8 text (binary is not byte-preserved), skipping Readability and the HTML content-type gate — for JSON, APIs, or raw page source. `MARKFETCH_MAX_BYTES` still applies.",
         ),
     },
   },
-  async ({ url, savePath }) => {
+  async ({ url, savePath, raw }) => {
     // Sandbox gate (MCP-only; CLI is intentionally unbounded). Runs before
     // fetchMarkdown so a forbidden path short-circuits the fetch. The
     // canonicalized check.resolved — not the caller's savePath — is what
@@ -68,6 +74,7 @@ server.registerTool(
       const { markdown, bytes, savedTo } = await fetchMarkdown({
         url,
         savePath: resolvedSavePath,
+        raw,
       });
       if (savedTo !== undefined) {
         // Echo the caller's original savePath in the confirmation. The bytes

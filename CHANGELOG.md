@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-06
+
+### Added
+- `--raw` (CLI) / `raw` (MCP): return the unprocessed body verbatim — no Readability, no content-type gate; `MARKFETCH_MAX_BYTES` still applies.
+
+### Fixed
+- Cloudflare-class CDNs 403 valid Chrome headers over HTTP/2 but pass them over HTTP/1.1 — markfetch now defaults to HTTP/1.1.
+- Empty-heading pruning truncated headings containing an inline `#` (`## Step 1 # download` became `# download`).
+
 ## [0.6.0] - 2026-05-14
 
 ### Added

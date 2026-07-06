@@ -6,12 +6,14 @@ Text processing pipeline:
 
 ```
 URL
-  → undici.fetch       HTTP/2 via ALPN; full Chrome header set; Sec-CH-UA-* derived from UA
+  → undici.fetch       HTTP/1.1; full Chrome header set; Sec-CH-UA-* derived from UA
   → linkedom.parseHTML
   → @mozilla/readability
   → turndown + GFM     HTML → markdown
   → caller             markdown body, or "Saved N bytes to /path" confirmation
 ```
+
+`raw` mode (`--raw` / MCP `raw`) returns the body straight from `undici.fetch`, skipping the parse → extract → convert steps.
 
 Errors throw `MarkfetchError` uniformly from core; adapters catch once. Codes: `network_error`, `http_error`, `timeout`, `unsupported_content_type`, `extraction_failed`, `too_large`, `save_failed`; plus `save_forbidden`, emitted by the MCP adapter only (before `fetchMarkdown` runs — see "Asymmetric write sandbox" under Core Decisions). CLI emits `[code] message` to stderr and exits 1; MCP emits `{ isError: true, content: [{ text: "[code] message" }] }`.
 
@@ -23,7 +25,9 @@ Errors throw `MarkfetchError` uniformly from core; adapters catch once. Codes: `
 
 - **Core throws, adapters translate.** Seven of the eight error codes surface from `core.ts` — five are thrown explicitly as `MarkfetchError`; `network_error`, `timeout`, and (sometimes) `http_error` are translated by `classifyError` from underlying-API errors (undici TypeErrors, AbortSignal timeouts). The eighth code, `save_forbidden`, is the exception — it's emitted by the MCP adapter before `fetchMarkdown` is invoked (see "Asymmetric write sandbox" below). New core codes need an `ErrorCode` union member + a throw site; adapters don't change.
 
-- **HTTP/2 + coherent Chrome fingerprint.** Wire protocol, headers, and UA must agree — a Chrome UA over HTTP/1.1 or without `Sec-CH-UA-*` is *more* suspicious than curl. `Sec-CH-UA-*` is derived from `MARKFETCH_USER_AGENT` at startup so override-coherence is mechanical.
+- **HTTP/1.1 + coherent Chrome header fingerprint.** Headers and UA must agree — a Chrome UA without `Sec-CH-UA-*` is a stronger bot signal than curl, so `Sec-CH-UA-*` is derived from `MARKFETCH_USER_AGENT` at startup and override-coherence is mechanical. HTTP/1.1 is deliberate: undici's h2 path hands `node:http2` a pre-connected socket whose first-flight frames some CDNs (Cloudflare, seen on `openai.com`) score as a bot and 403; the identical request over h1.1 passes. h2 buys nothing for single-shot GETs.
+
+- **`raw` passthrough.** Returns the fetched body verbatim — no Readability, no content-type gate; the fetch layer and `MARKFETCH_MAX_BYTES` cap stay. Same `fetchMarkdown` code path via a `raw` flag — no second entry point. Body is UTF-8 text; binary is not byte-preserved.
 
 - **Single-channel MCP response.** `content[0].text` only. Several major MCP clients (Claude Code CLI, VS Code/Copilot) forward only `structuredContent` to the model and drop `content[]` when both are present — a single-channel response keeps the markdown reachable from those clients.
 
@@ -40,6 +44,7 @@ Errors throw `MarkfetchError` uniformly from core; adapters catch once. Codes: `
 - **Authentication.** `MARKFETCH_AUTH_HEADER` env var (simple), or Chrome-cookie import for sites where the user is already logged in (frictionless, platform-specific, security-sensitive). Trigger: first useful internal / paywalled doc.
 - **JS rendering fallback for SPAs.** Playwright / headless Chrome as a companion package (`markfetch-heavy`) so the lean package stays lean. Trigger: enough useful sites returning `extraction_failed`.
 - **CloudFlare `/markdown` fallback.** Gated by `CF_AUTH_TOKEN`; fall back when Readability fails. Trigger: extraction failure rate stays high after Readability tuning.
+- **Browser-grade TLS + HTTP/2 impersonation.** Stricter CDN tiers fingerprint Node's TLS (JA3/JA4) and 403 every protocol. Apify's `impit` (BoringSSL-based) ships a Chrome-matching TLS + h2 fingerprint, near-drop-in for `undici.fetch`. Trigger: target sites 403 the current h1.1 + Chrome-header approach.
 - **Cookie reuse across redirects within a single fetch.** Currently none. Trigger: a target serves content only after a session-cookie redirect.
 - **Proxy support** (`MARKFETCH_PROXY_URL`) and **`Accept-Language` control** (`MARKFETCH_ACCEPT_LANGUAGE`). Trigger: corporate proxy / locale-specific content.
 - **Single-binary distribution.** Bun's `build --compile`, Node SEA, or similar. Trigger: `npx` first-run latency feedback, or an offline / airgapped need.

@@ -219,6 +219,73 @@ test("error: extraction_failed when Readability finds nothing", async () => {
   }
 });
 
+test("raw: non-HTML body is returned verbatim (content-type gate and Readability bypassed)", async () => {
+  const RAW = '{"hello":"world","items":[1,2,3]}';
+  const mock = await startMock((_req, res) => {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(RAW);
+  });
+  const client = await spawnClient();
+  try {
+    const result = await client.callTool({
+      name: "fetch_markdown",
+      arguments: { url: mock.url, raw: true },
+    });
+    // A JSON body would be unsupported_content_type without raw; here it comes
+    // back byte-for-byte, proving both the gate and extraction were skipped.
+    assert.equal(result.isError, false);
+    assert.equal(textOf(result), RAW);
+  } finally {
+    await client.close();
+    await mock.close();
+  }
+});
+
+test("raw: HTML is returned unprocessed, not run through Readability", async () => {
+  const HTML =
+    "<html><body><nav>menu</nav><article><h1>Title</h1><p>Body text.</p></article></body></html>";
+  const mock = await startMock((_req, res) => {
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    res.end(HTML);
+  });
+  const client = await spawnClient();
+  try {
+    const result = await client.callTool({
+      name: "fetch_markdown",
+      arguments: { url: mock.url, raw: true },
+    });
+    assert.equal(result.isError, false);
+    // Verbatim HTML — the <nav> chrome Readability would strip is still there.
+    assert.equal(textOf(result), HTML);
+  } finally {
+    await client.close();
+    await mock.close();
+  }
+});
+
+test("raw: MARKFETCH_MAX_BYTES still applies (too_large)", async () => {
+  const big = "y".repeat(5000);
+  const mock = await startMock((_req, res) => {
+    res.writeHead(200, {
+      "Content-Type": "application/json",
+      "Content-Length": String(Buffer.byteLength(big, "utf8")),
+    });
+    res.end(big);
+  });
+  const client = await spawnClient({ env: { MARKFETCH_MAX_BYTES: "100" } });
+  try {
+    const result = await client.callTool({
+      name: "fetch_markdown",
+      arguments: { url: mock.url, raw: true },
+    });
+    assert.equal(result.isError, true);
+    assert.match(textOf(result), /^\[too_large\]/);
+  } finally {
+    await client.close();
+    await mock.close();
+  }
+});
+
 test("error: too_large via Content-Length pre-check", async () => {
   const big = "<html><body>" + "x".repeat(5000) + "</body></html>";
   const mock = await startMock((_req, res) => {
@@ -440,6 +507,33 @@ test("savePath happy path: file written, response is confirmation, contents === 
   });
 });
 
+test("savePath + raw: the raw body (not markdown) is written to disk", async () => {
+  const RAW = '{"api":"response","n":7}';
+  const mock = await startMock((_req, res) => {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(RAW);
+  });
+  await withTmpDir(async (dir) => {
+    const savePath = join(dir, "out.json");
+    const client = await spawnClient();
+    try {
+      const saved = await client.callTool({
+        name: "fetch_markdown",
+        arguments: { url: mock.url, savePath, raw: true },
+      });
+      assert.equal(saved.isError, false);
+      assert.equal(
+        await readFile(savePath, "utf8"),
+        RAW,
+        "file must hold the raw body verbatim, not extracted markdown",
+      );
+    } finally {
+      await client.close();
+      await mock.close();
+    }
+  });
+});
+
 // T2 — UTF-8 multibyte regression-guard
 test("savePath multibyte: confirmation byte count === stat(file).size", async () => {
   const mock = await startMock((_req, res) => {
@@ -543,7 +637,7 @@ test("savePath: writeFile rejection surfaces as [save_failed] with errno; file i
   });
 });
 
-// T6 — THE Invariant. The file at savePath is only ever the markdown of the URL (per README and SPEC.md).
+// T6 — THE Invariant. The file at savePath is only ever the fetched output — extracted markdown, or the raw body with `raw` (per README and SPEC.md).
 test("savePath INVARIANT: fetch error + savePath → file is NOT written", async () => {
   const mock = await startMock((_req, res) => {
     res.writeHead(404, { "Content-Type": "text/html" });
