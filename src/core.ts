@@ -86,13 +86,14 @@ function deriveClientHints(ua: string): {
 
 const clientHints = deriveClientHints(config.userAgent);
 
-// Force HTTP/1.1 (undici's default, pinned here so it isn't silently switched
-// to h2). HTTP/2 buys nothing for single-shot GETs — no multiplexing to exploit,
-// negligible header compression — and undici's h2 path hands a pre-connected
-// socket to node:http2, whose first-flight frame pattern some CDNs (Cloudflare,
-// observed on openai.com) score as a bot and answer with 403 even against a
-// valid Chrome header set. HTTP/1.1 sidesteps that, and every h2 server also
-// speaks it, so nothing is lost.
+// Force HTTP/1.1. undici v8 defaults to allowH2:true (it negotiates h2 via ALPN
+// whenever the server offers it), so this turns h2 off deliberately — NOT a
+// redundant restatement of the default; deleting it re-enables h2. HTTP/2 buys
+// nothing for single-shot GETs — no multiplexing to exploit, negligible header
+// compression — and undici's h2 path hands a pre-connected socket to node:http2,
+// whose first-flight frame pattern some CDNs (Cloudflare, observed on openai.com)
+// score as a bot and answer with 403 even against a valid Chrome header set.
+// HTTP/1.1 sidesteps that, and every h2 server also speaks it, so nothing is lost.
 setGlobalDispatcher(new Agent({ allowH2: false }));
 
 const TURNDOWN = new TurndownService({
@@ -264,8 +265,9 @@ async function fetchBody(url: string, raw: boolean): Promise<string> {
   }
 
   const body = await response.text();
-  if (Buffer.byteLength(body, "utf8") > config.maxBytes) {
-    throw enforceTooLarge("Body", Buffer.byteLength(body, "utf8"));
+  const size = Buffer.byteLength(body, "utf8");
+  if (size > config.maxBytes) {
+    throw enforceTooLarge("Body", size);
   }
 
   return body;
@@ -397,6 +399,19 @@ function convertToMarkdown(article: {
   return result;
 }
 
+// Extract the main article and convert it to markdown. Throws extraction_failed
+// when Readability finds nothing (e.g. pure client-rendered SPAs).
+function extractMarkdown(html: string, url: string): string {
+  const article = extractArticle(html, url);
+  if (!article) {
+    throw new MarkfetchError(
+      "extraction_failed",
+      "Readability returned no article content.",
+    );
+  }
+  return convertToMarkdown(article);
+}
+
 // --- Unified entry point ---
 
 // Adapters call this with already-validated inputs (URL syntax checked by the
@@ -426,29 +441,9 @@ export async function fetchMarkdown(input: {
 }): Promise<{ markdown: string; bytes: number; savedTo?: string }> {
   const { url, savePath, raw = false } = input;
   const body = await fetchBody(url, raw);
-  // raw returns the fetched body untouched — no Readability, no markdown
-  // conversion — so the content channel (and any savePath file) carry it
-  // verbatim. Otherwise extract the main article and convert to markdown.
-  let content: string;
-  if (raw) {
-    content = body;
-  } else {
-    const article = extractArticle(body, url);
-    if (!article) {
-      throw new MarkfetchError(
-        "extraction_failed",
-        "Readability returned no article content.",
-      );
-    }
-    content = convertToMarkdown(article);
-  }
+  const content = raw ? body : extractMarkdown(body, url);
   const bytes = Buffer.byteLength(content, "utf8");
-  if (bytes > config.maxBytes) {
-    throw new MarkfetchError(
-      "too_large",
-      `Output ${bytes} bytes > MARKFETCH_MAX_BYTES (${config.maxBytes})`,
-    );
-  }
+  if (bytes > config.maxBytes) throw enforceTooLarge("Output", bytes);
   // The file at savePath is only ever the fetched output (extracted markdown,
   // or the raw body when `raw` is set). Fetch / extraction / size-cap failures
   // all throw above and never reach this branch, so the file is never written

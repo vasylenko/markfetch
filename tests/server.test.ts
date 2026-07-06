@@ -257,7 +257,6 @@ test("raw: HTML is returned unprocessed, not run through Readability", async () 
     assert.equal(result.isError, false);
     // Verbatim HTML — the <nav> chrome Readability would strip is still there.
     assert.equal(textOf(result), HTML);
-    assert.match(textOf(result), /<nav>menu<\/nav>/);
   } finally {
     await client.close();
     await mock.close();
@@ -508,6 +507,33 @@ test("savePath happy path: file written, response is confirmation, contents === 
   });
 });
 
+test("savePath + raw: the raw body (not markdown) is written to disk", async () => {
+  const RAW = '{"api":"response","n":7}';
+  const mock = await startMock((_req, res) => {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(RAW);
+  });
+  await withTmpDir(async (dir) => {
+    const savePath = join(dir, "out.json");
+    const client = await spawnClient();
+    try {
+      const saved = await client.callTool({
+        name: "fetch_markdown",
+        arguments: { url: mock.url, savePath, raw: true },
+      });
+      assert.equal(saved.isError, false);
+      assert.equal(
+        await readFile(savePath, "utf8"),
+        RAW,
+        "file must hold the raw body verbatim, not extracted markdown",
+      );
+    } finally {
+      await client.close();
+      await mock.close();
+    }
+  });
+});
+
 // T2 — UTF-8 multibyte regression-guard
 test("savePath multibyte: confirmation byte count === stat(file).size", async () => {
   const mock = await startMock((_req, res) => {
@@ -611,7 +637,7 @@ test("savePath: writeFile rejection surfaces as [save_failed] with errno; file i
   });
 });
 
-// T6 — THE Invariant. The file at savePath is only ever the markdown of the URL (per README and SPEC.md).
+// T6 — THE Invariant. The file at savePath is only ever the fetched output — extracted markdown, or the raw body with `raw` (per README and SPEC.md).
 test("savePath INVARIANT: fetch error + savePath → file is NOT written", async () => {
   const mock = await startMock((_req, res) => {
     res.writeHead(404, { "Content-Type": "text/html" });
