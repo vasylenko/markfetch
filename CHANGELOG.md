@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-06
+
 ### Added
 - `--raw` (CLI) / `raw` (MCP): return the unprocessed body verbatim — no Readability, no content-type gate; `MARKFETCH_MAX_BYTES` still applies.
 
