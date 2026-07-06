@@ -86,14 +86,11 @@ function deriveClientHints(ua: string): {
 
 const clientHints = deriveClientHints(config.userAgent);
 
-// Force HTTP/1.1. undici v8 defaults to allowH2:true (it negotiates h2 via ALPN
-// whenever the server offers it), so this turns h2 off deliberately — NOT a
-// redundant restatement of the default; deleting it re-enables h2. HTTP/2 buys
-// nothing for single-shot GETs — no multiplexing to exploit, negligible header
-// compression — and undici's h2 path hands a pre-connected socket to node:http2,
+// Force HTTP/1.1 — undici v8 defaults to allowH2:true, so deleting this line
+// re-enables h2. undici's h2 path hands a pre-connected socket to node:http2,
 // whose first-flight frame pattern some CDNs (Cloudflare, observed on openai.com)
-// score as a bot and answer with 403 even against a valid Chrome header set.
-// HTTP/1.1 sidesteps that, and every h2 server also speaks it, so nothing is lost.
+// score as a bot and 403 even against a valid Chrome header set. HTTP/1.1 passes
+// those edges, every h2 server speaks it, and h2 buys nothing for single-shot GETs.
 setGlobalDispatcher(new Agent({ allowH2: false }));
 
 const TURNDOWN = new TurndownService({
@@ -231,8 +228,7 @@ function chromeHeaders(): Record<string, string> {
 }
 
 // raw=true skips the HTML content-type gate so any body (JSON, plain text,
-// XML, source) is returned verbatim. Transport and the size caps are identical
-// either way; only the gate is conditional.
+// XML, source) is returned verbatim. Size caps apply either way.
 async function fetchBody(url: string, raw: boolean): Promise<string> {
   const response = await fetch(url, {
     signal: AbortSignal.timeout(config.timeoutMs),
@@ -399,8 +395,8 @@ function convertToMarkdown(article: {
   return result;
 }
 
-// Extract the main article and convert it to markdown. Throws extraction_failed
-// when Readability finds nothing (e.g. pure client-rendered SPAs).
+// Throws extraction_failed when Readability finds nothing (e.g. pure
+// client-rendered SPAs).
 function extractMarkdown(html: string, url: string): string {
   const article = extractArticle(html, url);
   if (!article) {
@@ -418,9 +414,9 @@ function extractMarkdown(html: string, url: string): string {
 // adapter's schema; savePath, if present, is an absolute path — adapters
 // resolve any relative-vs-absolute concerns before calling).
 //
-// With `raw`, the fetched body is returned verbatim — the content-type gate
-// and Readability/markdown conversion are skipped, so `unsupported_content_type`
-// and `extraction_failed` cannot arise in that mode. Size caps still apply.
+// With `raw`, the body is returned verbatim (no content-type gate, no Readability
+// conversion), so `unsupported_content_type` and `extraction_failed` cannot arise.
+// Size caps still apply.
 //
 // Errors are thrown uniformly as MarkfetchError. Adapters catch and translate:
 //   - mcp.ts catches → errorResult(code, message) → MCP {isError, content}
