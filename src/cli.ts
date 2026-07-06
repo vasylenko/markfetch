@@ -14,6 +14,7 @@
 import { Command } from "commander";
 import { resolve } from "node:path";
 import { fetchMarkdown, classifyError } from "./core.js";
+import { version } from "./version.js";
 
 const program = new Command();
 
@@ -23,7 +24,7 @@ program
     "Fetch a URL and return clean markdown.\n" +
       "Run with no arguments to start the MCP stdio server.",
   )
-  .version("0.6.0")
+  .version(version)
   .argument("<url>", "absolute http(s) URL to fetch")
   .option(
     "-o, --output <path>",

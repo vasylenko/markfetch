@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-07-06
+
+### Fixed
+- `--version` (CLI) and the MCP initialize handshake reported a stale hardcoded `0.6.0` after the 0.7.0 bump. Both now read the version from `package.json` at load, so what the binaries announce can't drift from the published version again.
+
 ## [0.7.0] - 2026-07-06
 
 ### Added

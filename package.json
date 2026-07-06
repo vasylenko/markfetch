@@ -1,6 +1,6 @@
 {
   "name": "markfetch",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Fetch a URL, return clean markdown. MCP server and CLI for AI agents.",
   "license": "MIT",
   "author": {

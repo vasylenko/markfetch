@@ -15,6 +15,7 @@ import { z } from "zod";
 import { fetchMarkdown, classifyError, type ErrorCode } from "./core.js";
 import { isAbsolute } from "node:path";
 import { buildAllowedRoots, checkPath } from "./sandbox.js";
+import { version } from "./version.js";
 
 // Built once at startup. Bad config throws and surfaces on stderr (same
 // fail-fast convention as intEnv() in core.ts).
@@ -27,7 +28,7 @@ function errorResult(code: ErrorCode, message: string) {
   };
 }
 
-const server = new McpServer({ name: "markfetch", version: "0.6.0" });
+const server = new McpServer({ name: "markfetch", version });
 
 server.registerTool(
   "fetch_markdown",

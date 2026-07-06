@@ -5,6 +5,7 @@
 
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import {
   createServer,
   type IncomingMessage,
@@ -24,6 +25,13 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 export const TSX_LOADER_URL = pathToFileURL(
   resolve("./node_modules/tsx/dist/loader.mjs"),
 ).href;
+
+// Expected version for handshake / --version assertions. Read from package.json
+// so the tests track the real version and stay in lockstep with the single
+// source both adapters read — no literal to bump (or forget) on release.
+export const PKG_VERSION: string = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+).version;
 
 export async function startMock(
   handler: (req: IncomingMessage, res: ServerResponse) => void,

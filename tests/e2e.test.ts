@@ -12,7 +12,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve as resolvePath } from "node:path";
-import { startMock, textOf } from "./_helpers.js";
+import { startMock, textOf, PKG_VERSION } from "./_helpers.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -53,12 +53,12 @@ const HAPPY_FIXTURE = `<!DOCTYPE html>
 </body>
 </html>`;
 
-test("e2e: built output boots, exposes fetch_markdown, pins version", async () => {
+test("e2e: built output boots, exposes fetch_markdown, reports package version", async () => {
   const client = await spawnBuilt();
   try {
     const info = client.getServerVersion();
     assert.equal(info?.name, "markfetch");
-    assert.equal(info?.version, "0.6.0");
+    assert.equal(info?.version, PKG_VERSION);
     const { tools } = await client.listTools();
     assert.equal(tools.length, 1);
     assert.equal(tools[0].name, "fetch_markdown");
@@ -166,7 +166,7 @@ test("e2e: built output --version prints package version, exit 0", async () => {
     { timeout: 10_000 },
   );
   assert.equal(stderr, "");
-  assert.equal(stdout, "0.6.0\n");
+  assert.equal(stdout, `${PKG_VERSION}\n`);
 });
 
 // Live E2E. Exercises the full pipeline against real production URLs.

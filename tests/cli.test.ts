@@ -9,7 +9,12 @@ import { promisify } from "node:util";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve as resolvePath } from "node:path";
-import { startMock, HAPPY_FIXTURE, TSX_LOADER_URL } from "./_helpers.js";
+import {
+  startMock,
+  HAPPY_FIXTURE,
+  TSX_LOADER_URL,
+  PKG_VERSION,
+} from "./_helpers.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -210,7 +215,7 @@ test("CLI: --version prints version to stdout, exit 0", async () => {
   const { code, stdout, stderr } = await runCli(["--version"]);
   assert.equal(code, 0);
   assert.equal(stderr, "");
-  assert.equal(stdout, "0.6.0\n");
+  assert.equal(stdout, `${PKG_VERSION}\n`);
 });
 
 // This test documents a deliberate asymmetry vs MCP: a malformed URL is NOT

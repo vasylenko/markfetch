@@ -21,6 +21,7 @@ import {
   spawnClient,
   assertSchemaRejection,
   spawnAndCaptureExit,
+  PKG_VERSION,
 } from "./_helpers.js";
 
 test("server boots over stdio and completes the initialize handshake", async () => {
@@ -28,7 +29,7 @@ test("server boots over stdio and completes the initialize handshake", async () 
   try {
     const info = client.getServerVersion();
     assert.equal(info?.name, "markfetch");
-    assert.equal(info?.version, "0.6.0");
+    assert.equal(info?.version, PKG_VERSION);
   } finally {
     await client.close();
   }
